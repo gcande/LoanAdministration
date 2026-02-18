@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { Session } from '@supabase/supabase-js';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -14,7 +15,7 @@ import Reports from './pages/Reports';
 import Config from './pages/Config';
 
 const App = () => {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,7 +24,7 @@ const App = () => {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: Session | null) => {
       setSession(session);
     });
 

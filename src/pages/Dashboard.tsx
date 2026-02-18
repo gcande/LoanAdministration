@@ -77,7 +77,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const lineData = {
     labels: ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'],

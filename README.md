@@ -158,3 +158,5 @@ El sistema genera información estratégica para la toma de decisiones:
 ---
 
 Desarrollado con ❤️ para la gestión financiera moderna.
+
+

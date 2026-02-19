@@ -139,8 +139,10 @@ El aplicativo utiliza las tecnologías más modernas de la industria, asegurando
 *   Creación de múltiples **Planes de Préstamo** (Ej: Plan Emprende, Diario, Oro).
 *   Personalización de tasas de interés, número de cuotas y frecuencias de pago (semanal, quincenal, mensual).
 
-#### ✅ Motor Financiero Avanzado
-*   **Amortización Automática**: Generación instantánea de cronogramas de pago bajo el **Sistema Francés** (cuotas fijas).
+#### ✅ Motor Financiero Flexible
+*   **Amortización Configurable**: El sistema soporta dos métodos de cálculo ajustables globalmente:
+    *   **Sistema Francés (Saldos)**: El interés se calcula sobre el capital que queda debiendo. Las cuotas son fijas pero el interés disminuye con el tiempo (más rentable para el cliente).
+    *   **Sistema Flat (Interés Simple)**: El interés se calcula sobre el monto inicial del préstamo. Se mantiene fijo en todas las cuotas (ideal para microcréditos y mayor rentabilidad).
 *   **Cálculo de Mora Inteligente**: El sistema detecta automáticamente retrasos y calcula penalizaciones diarias basadas en la configuración del administrador.
 *   **Gestión de Recaudos**: Registro de pagos con distribución automática (Capital / Interés / Mora).
 

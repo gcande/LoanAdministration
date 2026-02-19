@@ -141,5 +141,6 @@ INSERT INTO planes_prestamo (nombre_plan, monto_minimo, monto_maximo, tasa_inter
 INSERT INTO configuracion (clave, valor, descripcion) VALUES 
 ('tasa_mora_diaria', '1.5', 'Porcentaje de mora por día de retraso'),
 ('dias_gracia', '3', 'Días de gracia antes de aplicar mora'),
-('nombre_empresa', 'PrestaYa Finanzas', 'Nombre de la aplicación')
+('nombre_empresa', 'PrestaYa Finanzas', 'Nombre de la aplicación'),
+('sistema_amortizacion', 'frances', 'Basa el cálculo en el saldo pendiente (frances) o en el monto total (flat)')
 ON CONFLICT (clave) DO NOTHING;

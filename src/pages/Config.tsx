@@ -59,15 +59,38 @@ const Config = () => {
                 <p>{s.descripcion}</p>
               </div>
               <div className="setting-input">
-                <input 
-                  type="text" 
-                  value={s.valor} 
-                  onChange={e => {
-                    const newSettings = [...settings];
-                    newSettings[idx].valor = e.target.value;
-                    setSettings(newSettings);
-                  }}
-                />
+                {s.clave === 'sistema_amortizacion' ? (
+                  <>
+                    <select 
+                      value={s.valor}
+                      onChange={e => {
+                        const newSettings = [...settings];
+                        newSettings[idx].valor = e.target.value;
+                        setSettings(newSettings);
+                      }}
+                    >
+                      <option value="frances">Sistema Francés (Saldos)</option>
+                      <option value="flat">Sistema Flat (Simple)</option>
+                    </select>
+                    <div className="system-help">
+                      {s.valor === 'frances' ? (
+                        <p><strong>Francés:</strong> Las cuotas son constantes pero el interés se calcula sobre el saldo pendiente. El interés total es menor.</p>
+                      ) : (
+                        <p><strong>Flat:</strong> El interés se calcula siempre sobre el monto inicial. Ideal para microcréditos de cálculo rápido.</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <input 
+                    type="text" 
+                    value={s.valor} 
+                    onChange={e => {
+                      const newSettings = [...settings];
+                      newSettings[idx].valor = e.target.value;
+                      setSettings(newSettings);
+                    }}
+                  />
+                )}
               </div>
             </div>
           ))}
@@ -101,6 +124,20 @@ const Config = () => {
         .setting-info strong { font-size: 0.9rem; color: var(--primary); }
         .setting-info p { font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; }
         .setting-input { width: 140px; }
+        .setting-input:has(.system-help) { width: 300px; }
+        .system-help {
+          margin-top: 8px;
+          padding: 8px;
+          background: rgba(30, 58, 138, 0.05);
+          border-radius: 4px;
+          border-left: 3px solid var(--primary);
+        }
+        .system-help p {
+          margin: 0;
+          font-size: 11px;
+          line-height: 1.4;
+          color: var(--text-secondary);
+        }
         .mb-6 { margin-bottom: 24px; }
         .mt-8 { margin-top: 32px; }
         

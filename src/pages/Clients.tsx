@@ -82,7 +82,7 @@ const Clients = () => {
       <div className="actions-header">
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <UserPlus size={20} />
-          Nuevo Cliente
+          <span className="btn-text">Nuevo Cliente</span>
         </button>
         <p className="text-secondary">{filteredClientes.length} clientes encontrados</p>
       </div>
@@ -218,6 +218,16 @@ const Clients = () => {
           margin-top: 4px;
           font-size: 12px;
           color: #64748b;
+        }
+        
+        @media (max-width: 844px) {
+          .client-quick-actions {
+            flex-direction: column !important;
+            gap: 5px;
+          }
+          .btn-text {
+            display: none;
+          }
         }
 
         .client-quick-actions span {

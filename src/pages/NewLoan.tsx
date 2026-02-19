@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
-import { calculateAmortizationFrench, formatCurrency } from '../utils/finance';
+import { calculateAmortization, formatCurrency } from '../utils/finance';
 import type { AmortizationRow } from '../utils/finance';
-import { Save, Calculator } from 'lucide-react';
+import { Save, Calculator, Info, CheckCircle2, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const NewLoan = () => {
@@ -20,9 +20,11 @@ const NewLoan = () => {
 
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [schedule, setSchedule] = useState<AmortizationRow[]>([]);
+  const [amortSystem, setAmortSystem] = useState<'frances' | 'flat'>('frances');
 
   useEffect(() => {
     fetchData();
+    fetchConfig();
   }, []);
 
   const fetchData = async () => {
@@ -30,6 +32,17 @@ const NewLoan = () => {
     const { data: p } = await supabase.from('planes_prestamo').select('*').eq('activo', true);
     setClientes(c || []);
     setPlanes(p || []);
+  };
+
+  const fetchConfig = async () => {
+    const { data } = await supabase
+      .from('configuracion')
+      .select('valor')
+      .eq('clave', 'sistema_amortizacion')
+      .single();
+    if (data) {
+      setAmortSystem(data.valor as 'frances' | 'flat');
+    }
   };
 
   const handlePlanChange = (planId: string) => {
@@ -46,15 +59,15 @@ const NewLoan = () => {
 
   const calculatePreview = () => {
     if (!selectedPlan || !formData.monto) return;
-    const result = calculateAmortizationFrench(
+    const result = calculateAmortization(
       formData.monto,
       selectedPlan.tasa_interes,
       selectedPlan.num_cuotas,
       selectedPlan.frecuencia_pago,
-      formData.fecha_inicio
+      formData.fecha_inicio,
+      amortSystem
     );
     setSchedule(result);
-    console.log('result', result);
   };
 
   const handleCreateLoan = async () => {
@@ -158,10 +171,45 @@ const NewLoan = () => {
 
       {schedule.length > 0 && (
         <div className="card animate-fade">
-          <div className="schedule-header">
-            <h4>Cronograma de Pagos</h4>
-            <div className="summary-badge">
-              Cuotas de <strong>{formatCurrency(schedule[0].monto_cuota)}</strong>
+          <div className="loan-summary-grid">
+            <div className="summary-card">
+              <div className="summary-icon blue">
+                <Calculator size={18} />
+              </div>
+              <div className="summary-details">
+                <span>Cuota Periódica</span>
+                <strong>{formatCurrency(schedule[0].monto_cuota)}</strong>
+              </div>
+            </div>
+
+            <div className="summary-card">
+              <div className="summary-icon green">
+                <CheckCircle2 size={18} />
+              </div>
+              <div className="summary-details">
+                <span>Total a Pagar</span>
+                <strong>{formatCurrency(schedule.reduce((acc, row) => acc + row.monto_cuota, 0))}</strong>
+              </div>
+            </div>
+
+            <div className="summary-card">
+              <div className="summary-icon orange">
+                <TrendingUp size={18} />
+              </div>
+              <div className="summary-details">
+                <span>Total Intereses</span>
+                <strong>{formatCurrency(schedule.reduce((acc, row) => acc + row.monto_interes, 0))}</strong>
+              </div>
+            </div>
+
+            <div className="summary-card">
+              <div className="summary-icon light">
+                <Info size={18} />
+              </div>
+              <div className="summary-details">
+                <span>Tasa Aplicada</span>
+                <strong>{selectedPlan.tasa_interes}%</strong>
+              </div>
             </div>
           </div>
           
@@ -209,19 +257,53 @@ const NewLoan = () => {
         .w-full { width: 100%; }
         .mt-4 { margin-top: 20px; }
 
-        .schedule-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 16px;
+        .loan-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px;
+          margin-bottom: 24px;
         }
 
-        .summary-badge {
-          background: rgba(30, 58, 138, 0.1);
-          color: var(--primary);
-          padding: 8px 12px;
+        .summary-card {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          background: var(--bg-surface);
           border-radius: var(--radius);
+          border: 1px solid var(--border);
+        }
+
+        .summary-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .summary-icon.blue { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
+        .summary-icon.green { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .summary-icon.orange { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .summary-icon.light { background: rgba(100, 116, 139, 0.1); color: #64748b; }
+
+        .summary-details {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .summary-details span {
+          font-size: 11px;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+        }
+
+        .summary-details strong {
           font-size: 14px;
+          color: var(--primary);
         }
 
         .table-responsive {

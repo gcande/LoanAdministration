@@ -3,7 +3,8 @@ import Layout from '../components/Layout';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
-import { Check } from 'lucide-react';
+import { Check, MessageSquare, Share2 } from 'lucide-react';
+import jsPDF from 'jspdf';
 
 const Payments = () => {
   const { id } = useParams();
@@ -13,17 +14,19 @@ const Payments = () => {
   const [showModal, setShowModal] = useState(false);
   const [activeCuota, setActiveCuota] = useState<any>(null);
   const [montoRecibido, setMontoRecibido] = useState(0);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
   const [config, setConfig] = useState<any>(null);
 
   const fetchLoanDetails = useCallback(async () => {
-    // Buscar configuración de mora
+    // Buscar configuración
     const { data: conf } = await supabase.from('configuracion').select('*');
     const configObj = conf?.reduce((acc: any, curr: any) => ({ ...acc, [curr.clave]: curr.valor }), {});
     setConfig(configObj);
 
     const { data: l } = await supabase
       .from('prestamos')
-      .select('*, clientes(nombre, identificacion)')
+      .select('*, clientes(nombre, identificacion, telefono)')
       .eq('id', id)
       .single();
     
@@ -91,7 +94,7 @@ const Payments = () => {
       const { error: cuotaError } = await supabase.from('cuotas').update({
         estado: 'pagado',
         fecha_pago: new Date().toISOString(),
-        mora_acumulada: lateFeeToApply // Guardamos la mora calculada que se pagó
+        mora_acumulada: lateFeeToApply
       }).eq('id', activeCuota.id);
 
       if (cuotaError) throw cuotaError;
@@ -105,12 +108,104 @@ const Payments = () => {
         estado: nuevoSaldo <= 0 ? 'pagado' : 'activo'
       }).eq('id', id);
 
-      alert('Pago registrado con éxito');
+      setReceiptData({
+        cliente: loan.clientes.nombre,
+        telefono: loan.clientes.telefono,
+        cuotaNr: activeCuota.numero_cuota,
+        monto: montoRecibido,
+        mora: lateFeeToApply,
+        fecha: new Date().toLocaleString('es-CO'),
+        empresa: config.nombre_empresa || 'PrestaYa'
+      });
+
       setShowModal(false);
+      setShowReceipt(true);
       fetchLoanDetails();
     } catch (error) {
       console.error(error);
       alert('Error al registrar el pago');
+    }
+  };
+
+  const generatePDF = () => {
+    if (!receiptData) return;
+
+    const doc = new jsPDF({
+      unit: 'mm',
+      format: [80, 150]
+    });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(receiptData.empresa.toUpperCase(), 40, 15, { align: 'center' });
+    
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('NIT: 900.123.456-1', 40, 20, { align: 'center' });
+    doc.text('------------------------------------------', 40, 25, { align: 'center' });
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('COMPROBANTE DE PAGO', 40, 32, { align: 'center' });
+    doc.text(`Recibo: #${Math.floor(Math.random() * 9000) + 1000}`, 40, 37, { align: 'center' });
+    doc.text('------------------------------------------', 40, 42, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Fecha: ${receiptData.fecha}`, 10, 50);
+    doc.text(`Cliente: ${receiptData.cliente}`, 10, 55);
+    doc.text(`Identificación: ${loan.clientes.identificacion}`, 10, 60);
+    
+    doc.text('------------------------------------------', 40, 72, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.text('DETALLE DEL PAGO', 10, 80);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Cuota N°:`, 10, 87);
+    doc.text(`${receiptData.cuotaNr}`, 70, 87, { align: 'right' });
+    
+    doc.text(`Abono a Capital:`, 10, 92);
+    doc.text(`${formatCurrency(receiptData.monto - (activeCuota.monto_interes || 0) - receiptData.mora)}`, 70, 92, { align: 'right' });
+    
+    doc.text(`Abono a Interés:`, 10, 97);
+    doc.text(`${formatCurrency(activeCuota.monto_interes || 0)}`, 70, 97, { align: 'right' });
+    
+    if (receiptData.mora > 0) {
+      doc.text(`Mora / Recargos:`, 10, 102);
+      doc.text(`${formatCurrency(receiptData.mora)}`, 70, 102, { align: 'right' });
+    }
+
+    doc.text('------------------------------------------', 40, 110, { align: 'center' });
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL PAGADO:', 10, 118);
+    doc.text(`${formatCurrency(receiptData.monto)}`, 70, 118, { align: 'right' });
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.text('¡Gracias por su puntualidad!', 40, 140, { align: 'center' });
+    doc.text('Generado por PrestaYa Digital', 40, 144, { align: 'center' });
+
+    return doc;
+  };
+
+  const handleSharePDF = async () => {
+    const doc = generatePDF();
+    if (!doc) return;
+
+    const pdfBlob = doc.output('blob');
+    const file = new File([pdfBlob], `Recibo_${receiptData.cliente}.pdf`, { type: 'application/pdf' });
+
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'Recibo de Pago',
+          text: `Recibo de pago - ${receiptData.empresa}`
+        });
+      } catch (error) {
+        doc.save(`Recibo_${receiptData.cliente}.pdf`);
+      }
+    } else {
+      doc.save(`Recibo_${receiptData.cliente}.pdf`);
+      alert('PDF descargado. Ahora puedes compartirlo.');
     }
   };
 
@@ -199,45 +294,94 @@ const Payments = () => {
         </div>
       )}
 
-      <style>{`
-        .loan-summary {
-          background: var(--primary);
-          color: white;
-          border: none;
-        }
+      {showReceipt && receiptData && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-fade">
+            <div className="receipt-header">
+              <div className="success-badge">
+                <Check size={32} />
+              </div>
+              <h3>¡Pago Exitoso!</h3>
+              <p>El comprobante ha sido generado</p>
+            </div>
 
+            <div className="receipt-box">
+              <div className="receipt-row">
+                <span>Empresa:</span>
+                <strong>{receiptData.empresa}</strong>
+              </div>
+              <div className="receipt-row">
+                <span>Cliente:</span>
+                <strong>{receiptData.cliente}</strong>
+              </div>
+              <div className="receipt-row">
+                <span>Concepto:</span>
+                <strong>Cuota #{receiptData.cuotaNr}</strong>
+              </div>
+              <div className="receipt-row">
+                <span>Fecha:</span>
+                <strong>{receiptData.fecha}</strong>
+              </div>
+              <hr />
+              <div className="receipt-row total">
+                <span>Monto Pagado:</span>
+                <strong>{formatCurrency(receiptData.monto)}</strong>
+              </div>
+            </div>
+
+            <div className="modal-actions-vertical">
+              <button className="btn btn-primary w-full" onClick={handleSharePDF}>
+                <Share2 size={20} />
+                Descargar y Compartir PDF
+              </button>
+
+              <button 
+                className="btn btn-whatsapp w-full"
+                onClick={() => {
+                  const message = `*RECIBO DE PAGO - ${receiptData.empresa}*%0A%0A` +
+                    `Hola *${receiptData.cliente}*, confirmamos tu pago:%0A%0A` +
+                    `✅ *Concepto:* Cuota #${receiptData.cuotaNr}%0A` +
+                    `✅ *Monto:* ${formatCurrency(receiptData.monto)}%0A` +
+                    `✅ *Fecha:* ${receiptData.fecha}%0A%0A` +
+                    `¡Gracias por tu puntualidad!`;
+                  const phone = receiptData.telefono?.replace(/\D/g, '') || '';
+                  window.open(`https://wa.me/57${phone}?text=${message}`, '_blank');
+                }}
+              >
+                <MessageSquare size={20} />
+                Enviar Mensaje WhatsApp
+              </button>
+              
+              <button className="btn btn-outline w-full" onClick={() => setShowReceipt(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .modal-actions-vertical { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+        .btn-whatsapp { background: #25D366; color: white; border: none; }
+        .btn-whatsapp:hover { background: #128C7E; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+        .receipt-header { text-align: center; margin-bottom: 24px; }
+        .success-badge { width: 64px; height: 64px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+        .receipt-box { background: var(--bg-surface); border: 1px dashed var(--border); border-radius: var(--radius); padding: 20px; }
+        .receipt-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+        .receipt-row.total { margin-top: 8px; font-size: 18px; color: var(--primary); }
+        .receipt-row span { color: var(--text-secondary); }
+        .loan-summary { background: var(--primary); color: white; border: none; }
         .loan-summary h3 { color: white; margin-bottom: 4px; }
         .loan-summary p { color: rgba(255,255,255,0.7); font-size: 14px; }
         .summary-header h2 { color: white !important; }
-
         .summary-header { display: flex; justify-content: space-between; align-items: center; }
         .balance { text-align: right; }
         .balance span { display: block; font-size: 12px; opacity: 0.8; text-transform: uppercase; }
         .section-title { margin: 24px 0 16px; }
         .cuotas-list { display: flex; flex-direction: column; gap: 12px; }
-        
-        .cuota-item {
-          background: var(--card-bg);
-          padding: 16px;
-          border-radius: var(--radius);
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          border: 1px solid var(--border);
-        }
-
-        .cuota-nr {
-          width: 32px;
-          height: 32px;
-          background: var(--bg-surface);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 14px;
-        }
-
+        .cuota-item { background: var(--card-bg); padding: 16px; border-radius: var(--radius); display: flex; align-items: center; gap: 16px; border: 1px solid var(--border); }
+        .cuota-nr { width: 32px; height: 32px; background: var(--bg-surface); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
         .cuota-info { flex: 1; display: flex; flex-direction: column; }
         .cuota-info span { font-size: 12px; color: var(--text-secondary); }
         .mora-tag { color: var(--danger) !important; font-weight: 600; }
@@ -248,25 +392,9 @@ const Payments = () => {
         .detail-row.total { margin-top: 8px; font-weight: 700; font-size: 16px; color: var(--primary); }
         hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
         .mt-4 { margin-top: 16px; }
-        .w-full { width: 100%; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
-        .modal-overlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 2000;
-          padding: 20px;
-        }
-        .modal-content {
-          background: white;
-          padding: 24px;
-          border-radius: 20px;
-          width: 100%;
-          max-width: 400px;
-        }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
+        .modal-content { background: white; padding: 24px; border-radius: 20px; width: 100%; max-width: 400px; }
       `}</style>
     </Layout>
   );

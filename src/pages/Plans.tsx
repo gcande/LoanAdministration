@@ -247,108 +247,10 @@ const Plans = () => {
         </div>
       )}
 
-      <style>{`
-        .actions-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
 
-        .plans-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-          gap: 20px;
-        }
-
-        .plan-card {
-          border: 1px solid var(--border);
-          transition: transform 0.2s;
-        }
-
-        .plan-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 20px;
-        }
-
-        .plan-header h4 {
-          margin: 0;
-          color: var(--primary);
-          font-size: 1.1rem;
-        }
-
-        .plan-status {
-          margin-top: 4px;
-        }
-
-        .plan-content {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .info-box {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          background: var(--bg-surface);
-          padding: 12px;
-          border-radius: var(--radius);
-          text-align: center;
-        }
-
-        .info-item {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          border-right: 1px solid var(--border);
-        }
-
-        .info-item:last-child {
-          border-right: none;
-        }
-
-        .info-item span {
-          font-size: 11px;
-          color: var(--text-secondary);
-          text-transform: uppercase;
-        }
-
-        .rango-box {
-          border-left: 3px solid var(--accent);
-          padding-left: 12px;
-        }
-
-        .rango-box span {
-          font-size: 12px;
-          color: var(--text-secondary);
-        }
-
-        .rango-box p {
-          font-weight: 700;
-          margin-top: 4px;
-        }
-
-        .mb-0 { margin-bottom: 0 !important; }
-        .capitalize { text-transform: capitalize; }
-        .btn-outline {
-            border: 1px solid var(--border);
-            background: transparent;
-            color: var(--text-secondary);
-        }
-
-        @media (max-width: 600px) {
-          .actions-header {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 16px;
-          }
-          .actions-header button { width: 100%; }
-        }
-      `}</style>
     </Layout>
   );
 };
 
 export default Plans;
+

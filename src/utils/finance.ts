@@ -27,7 +27,7 @@ export function calculateAmortization(
   }
 
   const schedule: AmortizationRow[] = [];
-  let currentDate = new Date(fechaInicio);
+  const currentDate = new Date(fechaInicio);
 
   if (sistema === 'flat') {
     // Sistema Simple (Flat): Interés fijo sobre el monto inicial

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import Pagination from '../components/Pagination';
 import { supabase } from '../lib/supabase';
@@ -7,7 +7,7 @@ import { Search, CreditCard, Calendar, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const LoansList = () => {
-  const [loans, setLoans] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'todos' | 'activo' | 'en_mora' | 'pagado'>('todos');

@@ -74,7 +74,7 @@ const Clients = () => {
       }
       setShowCreateModal(false);
       setNewClient({ nombre: '', identificacion: '', telefono: '', email: '', direccion: '' });
-    } catch (error) {
+    } catch {
       alert('Error al crear cliente');
     }
   };
@@ -101,7 +101,7 @@ const Clients = () => {
       }
       setShowEditModal(false);
       setEditingClient(null);
-    } catch (error) {
+    } catch {
       alert('Error al actualizar cliente');
     }
   };
@@ -112,7 +112,7 @@ const Clients = () => {
         const { error } = await supabase.from('clientes').delete().eq('id', id);
         if (error) throw error;
         setClientes(clientes.filter(c => c.id !== id));
-      } catch (error) {
+      } catch {
         alert('Error al eliminar cliente');
       }
     }

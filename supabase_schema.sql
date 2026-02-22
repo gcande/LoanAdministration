@@ -95,13 +95,11 @@ CREATE TABLE IF NOT EXISTS configuracion (
 );
 
 -- 8. Usuarios / Perfiles
-CREATE TABLE IF NOT EXISTS profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    nombre TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    rol TEXT DEFAULT 'operador' CHECK (rol IN ('admin', 'operador', 'visualizador')),
-    activo BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.perfiles (
+  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  rol TEXT CHECK (rol IN ('admin', 'cobrador')) DEFAULT 'cobrador',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Seguridad RLS
@@ -112,11 +110,13 @@ ALTER TABLE cuotas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pagos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE penalizaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE configuracion ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE perfiles ENABLE ROW LEVEL SECURITY;
 
--- Políticas básicas (asumiendo que todos los autenticados pueden ver, pero solo admin/operador puede editar)
-CREATE POLICY "Public profiles are viewable by everyone." ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update their own profile." ON profiles FOR UPDATE USING (auth.uid() = id);
+-- Políticas para perfiles
+CREATE POLICY "Usuarios ven su propio perfil" ON perfiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Admins ven todos los perfiles" ON perfiles FOR ALL USING (
+  EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'admin')
+);
 
 -- Para simplificar el ejercicio, habilitaremos acceso total a usuarios autenticados
 -- En producción, esto debería ser más restrictivo según el ROL.
@@ -144,3 +144,17 @@ INSERT INTO configuracion (clave, valor, descripcion) VALUES
 ('nombre_empresa', 'PrestaYa Finanzas', 'Nombre de la aplicación'),
 ('sistema_amortizacion', 'frances', 'Basa el cálculo en el saldo pendiente (frances) o en el monto total (flat)')
 ON CONFLICT (clave) DO NOTHING;
+
+-- 9. Trigger para creación automática de perfil
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.perfiles (id, email, rol)
+  VALUES (new.id, new.email, 'cobrador');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();

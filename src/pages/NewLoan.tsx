@@ -247,95 +247,10 @@ const NewLoan = () => {
         </div>
       )}
 
-      <style>{`
-        .form-grid {
-          display: grid;
-          gap: 16px;
-          margin: 16px 0;
-        }
 
-        .w-full { width: 100%; }
-        .mt-4 { margin-top: 20px; }
-
-        .loan-summary-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 12px;
-          margin-bottom: 24px;
-        }
-
-        .summary-card {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px;
-          background: var(--bg-surface);
-          border-radius: var(--radius);
-          border: 1px solid var(--border);
-        }
-
-        .summary-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .summary-icon.blue { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
-        .summary-icon.green { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-        .summary-icon.orange { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-        .summary-icon.light { background: rgba(100, 116, 139, 0.1); color: #64748b; }
-
-        .summary-details {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .summary-details span {
-          font-size: 11px;
-          color: var(--text-secondary);
-          text-transform: uppercase;
-          font-weight: 600;
-          letter-spacing: 0.5px;
-        }
-
-        .summary-details strong {
-          font-size: 14px;
-          color: var(--primary);
-        }
-
-        .table-responsive {
-          overflow-x: auto;
-          margin: 0 -20px;
-          padding: 0 20px;
-        }
-
-        .schedule-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-        }
-
-        .schedule-table th {
-          text-align: left;
-          color: #64748b;
-          padding: 8px;
-          border-bottom: 2px solid var(--border);
-        }
-
-        .schedule-table td {
-          padding: 12px 8px;
-          border-bottom: 1px solid var(--border);
-        }
-
-        .schedule-table tr:last-child td {
-          border-bottom: none;
-        }
-      `}</style>
     </Layout>
   );
 };
 
 export default NewLoan;
+

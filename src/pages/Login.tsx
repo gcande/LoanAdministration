@@ -1,48 +1,66 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, ShieldCheck } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Lock, Mail, ChevronRight, AlertCircle } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setError(null);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
     if (error) {
-      alert(error.message);
+      setError('Credenciales inválidas. Por favor intenta de nuevo.');
+      setLoading(false);
     } else {
-      navigate('/');
+      const from = (location.state as any)?.from?.pathname || '/';
+      navigate(from, { replace: true });
     }
-    setLoading(false);
   };
 
   return (
-    <div className="login-container">
+    <div className="login-page">
       <div className="login-card animate-fade">
         <div className="login-header">
-          <div className="logo-icon">
-            <ShieldCheck size={40} />
+          <div className="login-logo">
+            <div className="logo-icon">
+              <Lock size={24} />
+            </div>
+            <h1>Presta<span>Ya</span></h1>
           </div>
-          <h2>PrestaYa Admin</h2>
-          <p>Gestión administrativa de préstamos</p>
+          <p>Gestión Integral de Cartera</p>
         </div>
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} className="login-form">
+          {error && (
+            <div className="login-error animate-pulse">
+              <AlertCircle size={18} />
+              <span>{error}</span>
+            </div>
+          )}
+
           <div className="form-group">
             <label>Correo Electrónico</label>
             <div className="input-with-icon">
-              <Mail size={20} />
+              <Mail size={18} />
               <input 
                 type="email" 
-                placeholder="admin@prestaya.com" 
-                required 
+                placeholder="ejemplo@correo.com"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
           </div>
@@ -50,44 +68,46 @@ const Login = () => {
           <div className="form-group">
             <label>Contraseña</label>
             <div className="input-with-icon">
-              <Lock size={20} />
+              <Lock size={18} />
               <input 
                 type="password" 
-                placeholder="••••••••" 
-                required 
+                placeholder="••••••••"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
           </div>
 
-          <button type="submit" className="btn btn-primary w-full login-btn" disabled={loading}>
-            {loading ? 'Iniciando sesión...' : 'Ingresar al Portal'}
+          <button type="submit" className="btn btn-primary btn-login" disabled={loading}>
+            {loading ? 'Iniciando sesión...' : 'Entrar al Sistema'}
+            <ChevronRight size={18} />
           </button>
         </form>
 
         <div className="login-footer">
-          <p>¿Olvidó su contraseña? <a href="#">Contacte a soporte</a></p>
+          <p>&copy; 2024 PrestaYa Digital. Todos los derechos reservados.</p>
         </div>
       </div>
 
       <style>{`
-        .login-container {
-          min-height: 100vh;
+        .login-page {
+          height: 100vh;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, var(--bg-dark) 0%, var(--primary) 100%);
+          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
           padding: 20px;
         }
 
         .login-card {
-          background: var(--card-bg);
+          background: white;
           width: 100%;
           max-width: 400px;
           padding: 40px;
           border-radius: 24px;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          border: 1px solid white;
         }
 
         .login-header {
@@ -95,26 +115,54 @@ const Login = () => {
           margin-bottom: 32px;
         }
 
-        .logo-icon {
-          width: 80px;
-          height: 80px;
-          background: rgba(30, 58, 138, 0.1);
-          color: var(--primary);
-          border-radius: 20px;
+        .login-logo {
           display: flex;
           align-items: center;
           justify-content: center;
-          margin: 0 auto 16px;
+          gap: 12px;
+          margin-bottom: 8px;
         }
 
-        .login-header h2 {
-          color: var(--text-dark);
+        .logo-icon {
+          width: 44px;
+          height: 44px;
+          background: var(--primary);
+          color: white;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(30, 58, 138, 0.2);
+        }
+
+        .login-logo h1 {
+          font-size: 28px;
+          font-weight: 800;
+          color: var(--primary);
           margin: 0;
+          letter-spacing: -0.5px;
+        }
+
+        .login-logo h1 span {
+          color: var(--secondary);
         }
 
         .login-header p {
-          color: #64748b;
+          color: var(--text-muted);
           font-size: 14px;
+        }
+
+        .login-error {
+          background: #fef2f2;
+          color: #dc2626;
+          padding: 12px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 13px;
+          margin-bottom: 20px;
+          border: 1px solid #fee2e2;
         }
 
         .input-with-icon {
@@ -125,31 +173,41 @@ const Login = () => {
 
         .input-with-icon svg {
           position: absolute;
-          left: 16px;
-          color: #94a3b8;
+          left: 12px;
+          color: var(--text-muted);
         }
 
         .input-with-icon input {
-          padding-left: 48px;
+          width: 100%;
+          padding: 12px 12px 12px 40px;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          font-size: 14px;
+          transition: var(--transition);
         }
 
-        .login-btn {
-          height: 52px;
+        .input-with-icon input:focus {
+          border-color: var(--primary);
+          box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.05);
+          outline: none;
+        }
+
+        .btn-login {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 14px;
           font-size: 16px;
           margin-top: 24px;
         }
 
         .login-footer {
+          margin-top: 40px;
           text-align: center;
-          margin-top: 24px;
-          font-size: 14px;
-          color: #64748b;
-        }
-
-        .login-footer a {
-          color: var(--primary);
-          text-decoration: none;
-          font-weight: 600;
+          font-size: 11px;
+          color: var(--text-muted);
         }
       `}</style>
     </div>

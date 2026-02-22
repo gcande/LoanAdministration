@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import Pagination from '../components/Pagination';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
 import { Search, CreditCard, Calendar, ChevronRight } from 'lucide-react';
@@ -11,67 +12,101 @@ const LoansList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'todos' | 'activo' | 'en_mora' | 'pagado'>('todos');
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(6);
+  const [totalCount, setTotalCount] = useState(0);
+  
+  // Stats for tabs
+  const [counts, setCounts] = useState({ todos: 0, activo: 0, en_mora: 0, pagado: 0 });
+
   const fetchLoans = async () => {
     setLoading(true);
-    // 1. Obtener préstamos con sus relaciones
-    const { data: loansData, error } = await supabase
-      .from('prestamos')
-      .select(`
-        *,
-        clientes (nombre, identificacion),
-        planes_prestamo (nombre_plan)
-      `)
-      .order('created_at', { ascending: false });
+    try {
+      const hoy = new Date().toISOString().split('T')[0];
 
-    if (error) {
-      console.error('Error fetching loans:', error);
-      setLoading(false);
-      return;
-    }
-
-    // 2. Obtener IDs de préstamos que tienen al menos una cuota vencida pendiente
-    const hoy = new Date().toISOString().split('T')[0];
-    const { data: cuotasVencidas } = await supabase
-      .from('cuotas')
-      .select('prestamo_id')
-      .neq('estado', 'pagado')
-      .lt('fecha_vencimiento', hoy);
-
-    const idsConMora = new Set(cuotasVencidas?.map(c => c.prestamo_id) || []);
-
-    // 3. Procesar los préstamos para la interfaz de usuario
-    const processedLoans = (loansData || []).map(loan => {
-      let uiStatus = loan.estado || 'activo';
+      // 1. Obtener IDs globales con mora para filtrar y contar
+      const { data: qMora } = await supabase
+        .from('cuotas')
+        .select('prestamo_id')
+        .neq('estado', 'pagado')
+        .lt('fecha_vencimiento', hoy);
       
-      // Si el préstamo no está pagado pero tiene cuotas vencidas, mostramos mora
-      if (loan.estado !== 'pagado' && idsConMora.has(loan.id)) {
-        uiStatus = 'en_mora';
+      const moraIds = Array.from(new Set(qMora?.map(x => x.prestamo_id) || []));
+
+      // 2. Obtener contadores totales para las pestañas (Diseño anterior)
+      const { count: cTodos } = await supabase.from('prestamos').select('*', { count: 'exact', head: true });
+      const { count: cPagado } = await supabase.from('prestamos').select('*', { count: 'exact', head: true }).eq('estado', 'pagado');
+      
+      // Contar cuántos de los 'activos' están realmente en mora para ajustar el contador de "Al día"
+      const { data: prestamosActivos } = await supabase.from('prestamos').select('id').eq('estado', 'activo');
+      const activosIds = (prestamosActivos || []).map(p => p.id);
+      const enMoraEfecivos = moraIds.filter(id => activosIds.includes(id));
+
+      setCounts({
+        todos: cTodos || 0,
+        activo: activosIds.length - enMoraEfecivos.length,
+        en_mora: moraIds.length,
+        pagado: cPagado || 0
+      });
+
+      // 3. Query Principal
+      let query = supabase
+        .from('prestamos')
+        .select(`
+          *,
+          clientes!inner (nombre, identificacion),
+          planes_prestamo (nombre_plan)
+        `, { count: 'exact' });
+
+      // 4. Aplicar Búsqueda y Filtros
+      if (searchTerm) {
+        query = query.or(`nombre.ilike.%${searchTerm}%,identificacion.ilike.%${searchTerm}%`, { foreignTable: 'clientes' });
       }
-      
-      return { 
-        ...loan, 
-        estado_ui: uiStatus 
-      };
-    });
 
-    setLoans(processedLoans);
-    setLoading(false);
+      if (filter === 'activo') {
+        query = query.eq('estado', 'activo');
+        if (moraIds.length > 0) {
+          query = query.not('id', 'in', `(${moraIds.join(',')})`);
+        }
+      }
+      if (filter === 'pagado') query = query.eq('estado', 'pagado');
+      if (filter === 'en_mora') {
+        if (moraIds.length > 0) {
+          query = query.in('id', moraIds);
+        } else {
+          query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
+      const { data, count, error } = await query
+        .order('created_at', { ascending: false })
+        .range((page - 1) * pageSize, page * pageSize - 1);
+
+      if (error) throw error;
+
+      // 5. Procesar estados para la UI
+      const moraSet = new Set(moraIds);
+      const processed = (data || []).map(loan => {
+        let uiStatus = loan.estado || 'activo';
+        if (loan.estado !== 'pagado' && moraSet.has(loan.id)) {
+          uiStatus = 'en_mora';
+        }
+        return { ...loan, estado_ui: uiStatus };
+      });
+
+      setLoans(processed);
+      setTotalCount(count || 0);
+    } catch (err) {
+      console.error('Error fetching loans:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchLoans();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filteredLoans = loans.filter(l => {
-    const name = String(l.clientes?.nombre || '').toLowerCase();
-    const idNum = String(l.clientes?.identificacion || '');
-    const search = searchTerm.toLowerCase();
-    
-    const matchSearch = name.includes(search) || idNum.includes(search);
-    const matchFilter = filter === 'todos' || l.estado_ui === filter;
-    
-    return matchSearch && matchFilter;
-  });
+  }, [page, searchTerm, filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -93,7 +128,7 @@ const LoansList = () => {
     { key: 'pagado', label: 'Pagados' }
   ];
 
-  const progressPercent = (loan: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const progressPercent = (loan: any) => {
     const total = Number(loan.monto_prestado) || 1;
     const pending = Number(loan.saldo_pendiente) || 0;
     return Math.round(((total - pending) / total) * 100);
@@ -109,7 +144,10 @@ const LoansList = () => {
             type="text"
             placeholder="Buscar por nombre o identificación..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
       </div>
@@ -120,13 +158,14 @@ const LoansList = () => {
           <button
             key={tab.key}
             className={`filter-tab ${filter === tab.key ? 'active' : ''}`}
-            onClick={() => setFilter(tab.key as 'todos' | 'activo' | 'en_mora' | 'pagado')}
+            onClick={() => {
+              setFilter(tab.key as any);
+              setPage(1);
+            }}
           >
             {tab.label}
             <span className="filter-tab-count">
-              {tab.key === 'todos'
-                ? loans.length
-                : loans.filter(l => l.estado_ui === tab.key).length}
+              {counts[tab.key as keyof typeof counts] || 0}
             </span>
           </button>
         ))}
@@ -144,7 +183,7 @@ const LoansList = () => {
               </div>
             ))}
           </div>
-        ) : filteredLoans.length === 0 ? (
+        ) : loans.length === 0 ? (
           <div className="empty-state">
             <CreditCard size={48} style={{ margin: '0 auto 16px', display: 'block', opacity: 0.2 }} />
             <p style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>No hay préstamos</p>
@@ -153,8 +192,9 @@ const LoansList = () => {
             </p>
           </div>
         ) : (
-          filteredLoans.map((loan, i) => {
-            const progress = progressPercent(loan);
+          <>
+            {loans.map((loan: any, i: number) => {
+              const progress = progressPercent(loan);
             return (
               <div
                 key={loan.id}
@@ -231,9 +271,17 @@ const LoansList = () => {
                 </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+          
+          <Pagination 
+            currentPage={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            onPageChange={(p) => setPage(p)}
+          />
+        </>
+      )}
+    </div>
 
     </Layout>
   );

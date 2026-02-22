@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
-import type { Session } from '@supabase/supabase-js';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -13,44 +12,77 @@ import Plans from './pages/Plans';
 import Login from './pages/Login';
 import Reports from './pages/Reports';
 import Config from './pages/Config';
+import UsersPage from './pages/Users';
 
 const App = () => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: Session | null) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (loading) return <div>Cargando...</div>;
-
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-        
-        {/* Rutas Protegidas */}
-        <Route path="/" element={session ? <Dashboard /> : <Navigate to="/login" />} />
-        <Route path="/clientes" element={session ? <Clients /> : <Navigate to="/login" />} />
-        <Route path="/prestamos" element={session ? <LoansList /> : <Navigate to="/login" />} />
-        <Route path="/nuevo-prestamo" element={session ? <NewLoan /> : <Navigate to="/login" />} />
-        <Route path="/pagos/:id" element={session ? <Payments /> : <Navigate to="/login" />} />
-        <Route path="/reportes" element={session ? <Reports /> : <Navigate to="/login" />} />
-        <Route path="/planes" element={session ? <Plans /> : <Navigate to="/login" />} />
-        <Route path="/configuracion" element={session ? <Config /> : <Navigate to="/login" />} />
-        
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Ruta Publica */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* Rutas Protegidas (Cualquier Usuario Autenticado) */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/clientes" element={
+            <ProtectedRoute>
+              <Clients />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/prestamos" element={
+            <ProtectedRoute>
+              <LoansList />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/nuevo-prestamo" element={
+            <ProtectedRoute>
+              <NewLoan />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/pagos/:id" element={
+            <ProtectedRoute>
+              <Payments />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/reportes" element={
+            <ProtectedRoute>
+              <Reports />
+            </ProtectedRoute>
+          } />
+
+          {/* Rutas Solo Admin */}
+          <Route path="/planes" element={
+            <ProtectedRoute requiredRole="admin">
+              <Plans />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/configuracion" element={
+            <ProtectedRoute requiredRole="admin">
+              <Config />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/usuarios" element={
+            <ProtectedRoute requiredRole="admin">
+              <UsersPage />
+            </ProtectedRoute>
+          } />
+
+          {/* Redirección por defecto */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 };
 

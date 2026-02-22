@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import Pagination from '../components/Pagination';
 import { Search, UserPlus, Filter, MoreVertical, Phone, Mail, Edit, Trash } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -29,26 +30,39 @@ const Clients = () => {
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchClientes();
-  }, []);
+  // Pagination & Search states
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchClientes = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('clientes')
-        .select('*')
-        .order('nombre', { ascending: true });
+        .select('*', { count: 'exact' });
+
+      if (searchTerm) {
+        query = query.or(`nombre.ilike.%${searchTerm}%,identificacion.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('nombre', { ascending: true })
+        .range((page - 1) * pageSize, page * pageSize - 1);
       
       if (error) throw error;
       setClientes(data || []);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchClientes();
+  }, [page, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,11 +125,6 @@ const Clients = () => {
     setActiveMenu(null);
   };
 
-  const filteredClientes = clientes.filter(c => 
-    c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.identificacion.includes(searchTerm)
-  );
-
   return (
     <Layout title="Clientes">
       <div className="search-bar">
@@ -125,7 +134,10 @@ const Clients = () => {
             type="text" 
             placeholder="Buscar por nombre o ID..." 
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
         <button className="btn-filter">
@@ -138,47 +150,60 @@ const Clients = () => {
           <UserPlus size={20} />
           <span className="btn-text">Nuevo Cliente</span>
         </button>
-        <p className="text-secondary">{filteredClientes.length} clientes encontrados</p>
+        <p className="text-secondary">{totalCount} clientes registrados</p>
       </div>
 
       <div className="clients-list">
         {loading ? (
-          <p>Cargando...</p>
-        ) : filteredClientes.map(cliente => (
-          <div key={cliente.id} className="card client-card">
-            <div className="client-avatar">
-              {cliente.nombre.charAt(0)}
-            </div>
-            <div className="client-info">
-              <h4>{cliente.nombre}</h4>
-              <p className="text-secondary">CC: {cliente.identificacion}</p>
-              <div className="client-quick-actions">
-                <span><Phone size={14} /> {cliente.telefono}</span>
-                <span><Mail size={14} /> {cliente.email}</span>
-              </div>
-            </div>
-            <div className="client-status">
-              <span className={`badge ${cliente.estado === 'activo' ? 'badge-success' : 'badge-danger'}`}>
-                {cliente.estado}
-              </span>
-              <div className="dropdown-container">
-                <button className="btn-icon" onClick={() => setActiveMenu(activeMenu === cliente.id ? null : cliente.id)}>
-                  <MoreVertical size={20} />
-                </button>
-                {activeMenu === cliente.id && (
-                  <div className="dropdown-menu animate-fade">
-                    <button onClick={() => openEditModal(cliente)}>
-                      <Edit size={16}/> Editar
-                    </button>
-                    <button onClick={() => handleDeleteClient(cliente.id)} className="text-danger">
-                      <Trash size={16}/> Eliminar
-                    </button>
+          <p style={{ textAlign: 'center', padding: '40px' }}>Cargando clientes...</p>
+        ) : clientes.length === 0 ? (
+          <p style={{ textAlign: 'center', padding: '40px' }}>No se encontraron clientes</p>
+        ) : (
+          <>
+            {clientes.map(cliente => (
+              <div key={cliente.id} className="card client-card">
+                <div className="client-avatar">
+                  {cliente.nombre.charAt(0)}
+                </div>
+                <div className="client-info">
+                  <h4>{cliente.nombre}</h4>
+                  <p className="text-secondary">CC: {cliente.identificacion}</p>
+                  <div className="client-quick-actions">
+                    <span><Phone size={14} /> {cliente.telefono}</span>
+                    <span><Mail size={14} /> {cliente.email}</span>
                   </div>
-                )}
+                </div>
+                <div className="client-status">
+                  <span className={`badge ${cliente.estado === 'activo' ? 'badge-success' : 'badge-danger'}`}>
+                    {cliente.estado}
+                  </span>
+                  <div className="dropdown-container">
+                    <button className="btn-icon" onClick={() => setActiveMenu(activeMenu === cliente.id ? null : cliente.id)}>
+                      <MoreVertical size={20} />
+                    </button>
+                    {activeMenu === cliente.id && (
+                      <div className="dropdown-menu animate-fade">
+                        <button onClick={() => openEditModal(cliente)}>
+                          <Edit size={16}/> Editar
+                        </button>
+                        <button onClick={() => handleDeleteClient(cliente.id)} className="text-danger">
+                          <Trash size={16}/> Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
+            ))}
+            
+            <Pagination 
+              currentPage={page}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              onPageChange={(p) => setPage(p)}
+            />
+          </>
+        )}
       </div>
 
       {showCreateModal && (

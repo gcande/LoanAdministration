@@ -12,9 +12,10 @@ import {
   Sliders,
   LayoutDashboard,
   ChevronRight,
-  Bell
+  Bell,
+  UserPlus
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,10 +25,11 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate('/login');
   };
 
@@ -84,6 +86,19 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           </button>
         </div>
 
+        {/* PERFIL DE USUARIO EN SIDEBAR */}
+        <div className="sidebar-user-profile">
+          <div className="user-avatar-small">
+            {user?.email?.charAt(0).toUpperCase()}
+          </div>
+          <div className="user-details">
+            <span className="user-email">{user?.email}</span>
+            <span className={`user-role-tag ${profile?.rol}`}>
+              {profile?.rol === 'admin' ? 'Administrador' : 'Cobrador'}
+            </span>
+          </div>
+        </div>
+
         <div className="sidebar-body">
           <nav className="sidebar-nav">
             <div className="sidebar-section-label">Principal</div>
@@ -108,17 +123,27 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
               <ChevronRight size={15} className="sidebar-link-arrow" />
             </NavLink>
 
-            <div className="sidebar-section-label" style={{ marginTop: '16px' }}>Configuración</div>
-            <NavLink to="/planes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={toggleSidebar}>
-              <div className="sidebar-link-icon"><Sliders size={18} /></div>
-              <span>Planes de Préstamo</span>
-              <ChevronRight size={15} className="sidebar-link-arrow" />
-            </NavLink>
-            <NavLink to="/configuracion" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={toggleSidebar}>
-              <div className="sidebar-link-icon"><Settings size={18} /></div>
-              <span>Ajustes</span>
-              <ChevronRight size={15} className="sidebar-link-arrow" />
-            </NavLink>
+            {profile?.rol === 'admin' && (
+              <>
+                <div className="sidebar-section-label" style={{ marginTop: '16px' }}>Administración</div>
+                <NavLink to="/usuarios" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={toggleSidebar}>
+                  <div className="sidebar-link-icon"><UserPlus size={18} /></div>
+                  <span>Gestión de Usuarios</span>
+                  <ChevronRight size={15} className="sidebar-link-arrow" />
+                </NavLink>
+                <div className="sidebar-section-label" style={{ marginTop: '16px' }}>Configuración</div>
+                <NavLink to="/planes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={toggleSidebar}>
+                  <div className="sidebar-link-icon"><Sliders size={18} /></div>
+                  <span>Planes de Préstamo</span>
+                  <ChevronRight size={15} className="sidebar-link-arrow" />
+                </NavLink>
+                <NavLink to="/configuracion" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={toggleSidebar}>
+                  <div className="sidebar-link-icon"><Settings size={18} /></div>
+                  <span>Ajustes</span>
+                  <ChevronRight size={15} className="sidebar-link-arrow" />
+                </NavLink>
+              </>
+            )}
           </nav>
         </div>
 
@@ -644,6 +669,46 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           transform: scale(0.93);
         }
 
+        .sidebar-user-profile {
+          margin: 16px;
+          padding: 16px;
+          background: var(--bg-surface);
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          border: 1px solid var(--border-light);
+        }
+
+        .user-avatar-small {
+          width: 36px;
+          height: 36px;
+          background: var(--primary);
+          color: white;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: 14px;
+        }
+
+        .user-details {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          overflow: hidden;
+        }
+
+        .user-email {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
         /* ========================
            RESPONSIVE
         ======================== */
@@ -671,7 +736,6 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           .nav-item {
             padding: 8px 10px;
           }
-        }
       `}</style>
     </div>
   );

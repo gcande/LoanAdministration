@@ -6,7 +6,9 @@ import {
   Calendar,
   AlertCircle,
   ArrowUpRight,
-  DollarSign
+  DollarSign,
+  Shield,
+  User
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
@@ -24,6 +26,7 @@ import {
   Filler
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
+import { useAuth } from '../contexts/AuthContext';
 
 ChartJS.register(
   CategoryScale,
@@ -212,8 +215,14 @@ const Dashboard = () => {
     }
   ];
 
+  const { profile } = useAuth();
+
   return (
     <Layout title="Dashboard" subtitle="Resumen de tu cartera de préstamos">
+      <span className={`role-badge dashboard ${profile?.rol}`}>
+        {profile?.rol === 'admin' ? <Shield size={12} /> : <User size={12} />}
+        {profile?.rol === 'admin' ? 'Administrador' : 'Cobrador'}
+      </span>
       {/* STAT CARDS */}
       <div className="stats-row">
         {statCards.map((card, i) => (

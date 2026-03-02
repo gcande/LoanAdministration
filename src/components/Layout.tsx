@@ -736,6 +736,59 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           .nav-item {
             padding: 8px 10px;
           }
+        }
+
+        /* ========================
+           DESKTOP / WEB ADJUSTMENTS
+           ======================== */
+        @media (min-width: 1024px) {
+          /* Mantener la sidebar abierta y fija */
+          .app-sidebar {
+            transform: translateX(0) !important;
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 320px;
+            z-index: 900;
+            box-shadow: none;
+          }
+
+          /* No mostrar overlay en escritorio */
+          .sidebar-backdrop {
+            display: none;
+            opacity: 0;
+            visibility: hidden;
+          }
+
+          /* Ocultar botón de menú (solo móvil) */
+          .header-menu-btn {
+            display: none;
+          }
+
+          /* Ajustar cabecera para dejar espacio a la sidebar */
+          .app-header {
+            padding-left: 360px;
+          }
+
+          /* Contenido principal desplazado a la derecha de la sidebar */
+          .app-main {
+            margin-left: 360px;
+            max-width: calc(100% - 360px);
+            padding: 40px 48px;
+            padding-bottom: calc(var(--nav-height) + 40px);
+          }
+
+          /* Ocultar navegación inferior en pantallas grandes */
+          .bottom-nav {
+            display: none;
+          }
+
+          /* Aumentar tamaño del título en escritorio */
+          .page-title {
+            font-size: 28px;
+          }
+        }
       `}</style>
     </div>
   );

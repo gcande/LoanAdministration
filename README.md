@@ -90,7 +90,7 @@ npm install
 # Iniciar servidor de desarrollo
 npm run dev
 
-# Construir para producción
+# Construir para producción o para verificar antes de hacer un deploy
 npm run build
 ```
 

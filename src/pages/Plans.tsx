@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
+import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
-import { Plus, Trash2, Edit, Check, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Check } from 'lucide-react';
 import { formatCurrency } from '../utils/finance';
 
 const Plans = () => {
@@ -150,102 +151,99 @@ const Plans = () => {
         ))}
       </div>
 
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-content animate-fade">
-            <div className="modal-header">
-              <h3>{editingId ? 'Editar Plan' : 'Crear Nuevo Plan'}</h3>
-              <button className="btn-icon" onClick={() => setShowModal(false)}><X size={20} /></button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="mt-4">
-              <div className="form-group">
-                <label>Nombre del Producto</label>
-                <input 
-                  required 
-                  type="text" 
-                  value={formData.nombre_plan}
-                  placeholder="Ej: Plan Microcrédito Express"
-                  onChange={e => setFormData({...formData, nombre_plan: e.target.value})} 
-                />
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group">
-                  <label>Tasa de Interés (%)</label>
-                  <input 
-                    required
-                    type="number" 
-                    step="0.01"
-                    value={formData.tasa_interes}
-                    onChange={e => setFormData({...formData, tasa_interes: Number(e.target.value)})} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Número de Cuotas</label>
-                  <input 
-                    required
-                    type="number" 
-                    value={formData.num_cuotas}
-                    onChange={e => setFormData({...formData, num_cuotas: Number(e.target.value)})} 
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Frecuencia de Pagos</label>
-                <select 
-                  value={formData.frecuencia_pago}
-                  onChange={e => setFormData({...formData, frecuencia_pago: e.target.value})}
-                >
-                  <option value="semanal">Semanal</option>
-                  <option value="quincenal">Quincenal</option>
-                  <option value="mensual">Mensual</option>
-                </select>
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group">
-                  <label>Monto Mínimo</label>
-                  <input 
-                    required
-                    type="number" 
-                    value={formData.monto_minimo}
-                    onChange={e => setFormData({...formData, monto_minimo: Number(e.target.value)})} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Monto Máximo</label>
-                  <input 
-                    required
-                    type="number" 
-                    value={formData.monto_maximo}
-                    onChange={e => setFormData({...formData, monto_maximo: Number(e.target.value)})} 
-                  />
-                </div>
-              </div>
-
-              <div className="form-group flex-row">
-                <input 
-                  type="checkbox" 
-                  checked={formData.activo} 
-                  id="activo"
-                  onChange={e => setFormData({...formData, activo: e.target.checked})} 
-                />
-                <label htmlFor="activo" className="mb-0">Plan Activo (disponible para nuevos préstamos)</label>
-              </div>
-
-              <div className="modal-actions mt-6">
-                <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">
-                  <Check size={18} />
-                  {editingId ? 'Guardar Cambios' : 'Crear Plan'}
-                </button>
-              </div>
-            </form>
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingId ? 'Editar Plan' : 'Crear Nuevo Plan'}
+      >
+        <form onSubmit={handleSubmit} className="mt-4">
+          <div className="form-group">
+            <label>Nombre del Producto</label>
+            <input 
+              required 
+              type="text" 
+              value={formData.nombre_plan}
+              placeholder="Ej: Plan Microcrédito Express"
+              onChange={e => setFormData({...formData, nombre_plan: e.target.value})} 
+            />
           </div>
-        </div>
-      )}
+
+          <div className="grid-2">
+            <div className="form-group">
+              <label>Tasa de Interés (%)</label>
+              <input 
+                required
+                type="number" 
+                step="0.01"
+                value={formData.tasa_interes}
+                onChange={e => setFormData({...formData, tasa_interes: Number(e.target.value)})} 
+              />
+            </div>
+            <div className="form-group">
+              <label>Número de Cuotas</label>
+              <input 
+                required
+                type="number" 
+                value={formData.num_cuotas}
+                onChange={e => setFormData({...formData, num_cuotas: Number(e.target.value)})} 
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Frecuencia de Pagos</label>
+            <select 
+              className="form-select"
+              value={formData.frecuencia_pago}
+              onChange={e => setFormData({...formData, frecuencia_pago: e.target.value})}
+            >
+              <option value="semanal">Semanal</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="mensual">Mensual</option>
+            </select>
+          </div>
+
+          <div className="grid-2">
+            <div className="form-group">
+              <label>Monto Mínimo</label>
+              <input 
+                required
+                type="number" 
+                value={formData.monto_minimo}
+                onChange={e => setFormData({...formData, monto_minimo: Number(e.target.value)})} 
+              />
+            </div>
+            <div className="form-group">
+              <label>Monto Máximo</label>
+              <input 
+                required
+                type="number" 
+                value={formData.monto_maximo}
+                onChange={e => setFormData({...formData, monto_maximo: Number(e.target.value)})} 
+              />
+            </div>
+          </div>
+
+          <div className="form-group flex items-center gap-2 mt-4">
+            <input 
+              type="checkbox" 
+              checked={formData.activo} 
+              id="activo"
+              style={{ width: 'auto' }}
+              onChange={e => setFormData({...formData, activo: e.target.checked})} 
+            />
+            <label htmlFor="activo" className="mb-0">Plan Activo (disponible para nuevos préstamos)</label>
+          </div>
+
+          <div className="modal-actions mt-6">
+            <button type="button" className="btn btn-neutral" onClick={() => setShowModal(false)}>Cancelar</button>
+            <button type="submit" className="btn btn-primary">
+              <Check size={18} />
+              {editingId ? 'Guardar Cambios' : 'Crear Plan'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
 
     </Layout>

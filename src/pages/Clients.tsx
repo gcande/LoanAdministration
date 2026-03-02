@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import Pagination from '../components/Pagination';
+import Modal from '../components/Modal';
 import { Search, UserPlus, Filter, MoreVertical, Phone, Mail, Edit, Trash } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Cliente {
   id: string;
@@ -15,6 +17,7 @@ interface Cliente {
 }
 
 const Clients = () => {
+  const { profile } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -40,7 +43,8 @@ const Clients = () => {
     try {
       let query = supabase
         .from('clientes')
-        .select('*', { count: 'exact' });
+        .select('*', { count: 'exact' })
+        .is('deleted_at', null);
 
       if (searchTerm) {
         query = query.or(`nombre.ilike.%${searchTerm}%,identificacion.ilike.%${searchTerm}%`);
@@ -109,7 +113,10 @@ const Clients = () => {
   const handleDeleteClient = async (id: string) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
       try {
-        const { error } = await supabase.from('clientes').delete().eq('id', id);
+        const { error } = await supabase
+          .from('clientes')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', id);
         if (error) throw error;
         setClientes(clientes.filter(c => c.id !== id));
       } catch {
@@ -146,10 +153,12 @@ const Clients = () => {
       </div>
 
       <div className="actions-header">
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          <UserPlus size={20} />
-          <span className="btn-text">Nuevo Cliente</span>
-        </button>
+        {profile?.rol === 'admin' && (
+          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+            <UserPlus size={20} />
+            <span className="btn-text">Nuevo Cliente</span>
+          </button>
+        )}
         <p className="text-secondary">{totalCount} clientes registrados</p>
       </div>
 
@@ -181,7 +190,7 @@ const Clients = () => {
                     <button className="btn-icon" onClick={() => setActiveMenu(activeMenu === cliente.id ? null : cliente.id)}>
                       <MoreVertical size={20} />
                     </button>
-                    {activeMenu === cliente.id && (
+                    {activeMenu === cliente.id && profile?.rol === 'admin' && (
                       <div className="dropdown-menu animate-fade">
                         <button onClick={() => openEditModal(cliente)}>
                           <Edit size={16}/> Editar
@@ -206,47 +215,49 @@ const Clients = () => {
         )}
       </div>
 
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content animate-fade" onClick={e => e.stopPropagation()}>
-            <h3>Registro de Cliente</h3>
-            <form onSubmit={handleCreateClient}>
-              <div className="form-group">
-                <label>Nombre Completo</label>
-                <input required type="text" value={newClient.nombre} onChange={e => setNewClient({...newClient, nombre: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>Identificación</label>
-                <input required type="text" value={newClient.identificacion} onChange={e => setNewClient({...newClient, identificacion: e.target.value})} />
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label>Teléfono</label>
-                  <input type="tel" value={newClient.telefono} onChange={e => setNewClient({...newClient, telefono: e.target.value})} />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input type="email" value={newClient.email} onChange={e => setNewClient({...newClient, email: e.target.value})} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Dirección</label>
-                <input type="text" value={newClient.direccion} onChange={e => setNewClient({...newClient, direccion: e.target.value})} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setShowCreateModal(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Registrar</button>
-              </div>
-            </form>
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Registro de Cliente"
+      >
+        <form onSubmit={handleCreateClient}>
+          <div className="form-group">
+            <label>Nombre Completo</label>
+            <input required type="text" value={newClient.nombre} onChange={e => setNewClient({...newClient, nombre: e.target.value})} />
           </div>
-        </div>
-      )}
+          <div className="form-group">
+            <label>Identificación</label>
+            <input required type="text" value={newClient.identificacion} onChange={e => setNewClient({...newClient, identificacion: e.target.value})} />
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label>Teléfono</label>
+              <input type="tel" value={newClient.telefono} onChange={e => setNewClient({...newClient, telefono: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label>Email</label>
+              <input type="email" value={newClient.email} onChange={e => setNewClient({...newClient, email: e.target.value})} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Dirección</label>
+            <input type="text" value={newClient.direccion} onChange={e => setNewClient({...newClient, direccion: e.target.value})} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-neutral" onClick={() => setShowCreateModal(false)}>Cancelar</button>
+            <button type="submit" className="btn btn-primary">Registrar</button>
+          </div>
+        </form>
+      </Modal>
 
-      {showEditModal && editingClient && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal-content animate-fade" onClick={e => e.stopPropagation()}>
-            <h3>Editar Cliente</h3>
-            <form onSubmit={handleUpdateClient}>
+      <Modal
+        isOpen={showEditModal && !!editingClient}
+        onClose={() => setShowEditModal(false)}
+        title="Editar Cliente"
+      >
+        <form onSubmit={handleUpdateClient}>
+          {editingClient && (
+            <>
               <div className="form-group">
                 <label>Nombre Completo</label>
                 <input required type="text" value={editingClient.nombre} onChange={e => setEditingClient({...editingClient, nombre: e.target.value})} />
@@ -270,13 +281,13 @@ const Clients = () => {
                 <input type="text" value={editingClient.direccion} onChange={e => setEditingClient({...editingClient, direccion: e.target.value})} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setShowEditModal(false)}>Cancelar</button>
+                <button type="button" className="btn btn-neutral" onClick={() => setShowEditModal(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Guardar Cambios</button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </>
+          )}
+        </form>
+      </Modal>
 
 
     </Layout>

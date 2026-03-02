@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS clientes (
     foto_url TEXT,
     fecha_registro TIMESTAMPTZ DEFAULT now(),
     estado TEXT DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo', 'bloqueado')),
+    deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS prestamos (
     fecha_fin DATE,
     estado TEXT DEFAULT 'activo' CHECK (estado IN ('activo', 'al_dia', 'en_mora', 'pagado', 'cancelado')),
     saldo_pendiente DECIMAL(15, 2) NOT NULL,
+    cobrador_id UUID REFERENCES perfiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -99,6 +101,7 @@ CREATE TABLE public.perfiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   rol TEXT CHECK (rol IN ('admin', 'cobrador')) DEFAULT 'cobrador',
+  deleted_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

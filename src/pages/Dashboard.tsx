@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
+import { Link } from 'react-router-dom';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -48,16 +49,36 @@ const Dashboard = () => {
     expectedToday: 0,
     paymentsToday: 0,
     delinquentCount: 0,
-    recoveryRate: 85
+    recoveryRate: 85,
+    weeklyGoal: 0,
+    weeklyCollected: 0
   });
+  const [assignedLoans, setAssignedLoans] = useState<any[]>([]);
+  const [loadingLoans, setLoadingLoans] = useState(false);
+  const { user, profile } = useAuth();
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const { data: loansActive } = await supabase.from('prestamos').select('count', { count: 'exact' }).eq('estado', 'activo');
-      const { data: portfolio } = await supabase.from('prestamos').select('saldo_pendiente');
-      const { data: todayCuotas } = await supabase.from('cuotas').select('monto_cuota').eq('fecha_vencimiento', new Date().toISOString().split('T')[0]);
-      const {data: paymentsToday} = await supabase.from('cuotas').select('fecha_pago');
-      const { data: delinquents } = await supabase.from('prestamos').select('count', { count: 'exact' }).eq('estado', 'en_mora');
+      let lQuery = supabase.from('prestamos').select('count', { count: 'exact' }).eq('estado', 'activo');
+      let pQuery = supabase.from('prestamos').select('saldo_pendiente');
+      let cQuery = supabase.from('cuotas').select('monto_cuota, prestamos!inner(cobrador_id)').eq('fecha_vencimiento', new Date().toISOString().split('T')[0]);
+      let payQuery = supabase.from('cuotas').select('fecha_pago, prestamos!inner(cobrador_id)');
+      let dQuery = supabase.from('prestamos').select('count', { count: 'exact' }).eq('estado', 'en_mora');
+
+      if (profile?.rol === 'cobrador') {
+        const uid = user?.id;
+        lQuery = lQuery.eq('cobrador_id', uid);
+        pQuery = pQuery.eq('cobrador_id', uid);
+        cQuery = cQuery.eq('prestamos.cobrador_id', uid);
+        payQuery = payQuery.eq('prestamos.cobrador_id', uid);
+        dQuery = dQuery.eq('cobrador_id', uid);
+      }
+
+      const { data: loansActive } = await lQuery;
+      const { data: portfolio } = await pQuery;
+      const { data: todayCuotas } = await cQuery;
+      const { data: paymentsToday } = await payQuery;
+      const { data: delinquents } = await dQuery;
 
       const totalPortfolio = (portfolio as any[])?.reduce((acc: number, curr: any) => acc + Number(curr.saldo_pendiente), 0) || 0;
       const totalToday = (todayCuotas as any[])?.reduce((acc: number, curr: any) => acc + Number(curr.monto_cuota), 0) || 0;
@@ -74,16 +95,95 @@ const Dashboard = () => {
         expectedToday: totalToday,
         paymentsToday: totalPaymentsToday,
         delinquentCount: (delinquents as any)?.[0]?.count || 0,
-        recoveryRate: 92
+        recoveryRate: 92,
+        weeklyGoal: 0,
+        weeklyCollected: 0
       });
+
+      // Rango de la semana actual (Lunes a Domingo)
+      const now = new Date();
+      const dayOfWeek = now.getDay() || 7; // 1 (Lun) a 7 (Dom)
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - dayOfWeek + 1);
+      monday.setHours(0,0,0,0);
+      
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23,59,59,999);
+
+      const startStr = monday.toISOString().split('T')[0];
+      const endStr = sunday.toISOString().split('T')[0];
+
+      // Fetch assigned loans details for collector table
+      if (profile?.rol === 'cobrador') {
+        setLoadingLoans(true);
+        const uid = user?.id;
+
+        // 1. Prestamos y Cuotas para la tabla
+        const { data: aLoans } = await supabase
+          .from('prestamos')
+          .select(`
+            id,
+            monto_prestado,
+            saldo_pendiente,
+            estado,
+            clientes (nombre, identificacion, telefono),
+            cuotas (monto_cuota, fecha_vencimiento, estado)
+          `)
+          .eq('cobrador_id', uid)
+          .neq('estado', 'pagado')
+          .order('created_at', { ascending: false });
+
+        // 2. Meta Semanal: Cuotas que vencen esta semana
+        const { data: weeklyCuotas } = await supabase
+          .from('cuotas')
+          .select('monto_cuota, prestamos!inner(cobrador_id)')
+          .eq('prestamos.cobrador_id', uid)
+          .gte('fecha_vencimiento', startStr)
+          .lte('fecha_vencimiento', endStr);
+
+        // 3. Recaudado Semanal: Pagos realizados esta semana
+        const { data: weeklyPayments } = await supabase
+          .from('pagos')
+          .select('monto_pagado, prestamos!inner(cobrador_id)')
+          .eq('prestamos.cobrador_id', uid)
+          .gte('fecha_pago', monday.toISOString())
+          .lte('fecha_pago', sunday.toISOString());
+
+        const goal = weeklyCuotas?.reduce((acc, c) => acc + Number(c.monto_cuota), 0) || 0;
+        console.log('weeklyCuotas', weeklyCuotas);
+        const collected = weeklyPayments?.reduce((acc, p) => acc + Number(p.monto_pagado), 0) || 0;
+        
+        // Filtrar cuotas pendientes para cada préstamo (solo la más próxima)
+        const hoy = new Date().toISOString().split('T')[0];
+        const processed = (aLoans || []).map(loan => {
+          const nextCuota = loan.cuotas
+            ?.filter((c: any) => c.estado !== 'pagado')
+            ?.sort((a: any, b: any) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime())[0];
+          
+          return {
+            ...loan,
+            proxima_cuota: nextCuota,
+            es_para_hoy: nextCuota?.fecha_vencimiento === hoy
+          };
+        });
+
+        setStats(prev => ({
+          ...prev,
+          weeklyGoal: goal,
+          weeklyCollected: collected
+        }));
+        setAssignedLoans(processed);
+        setLoadingLoans(false);
+      }
     } catch (error) {
       console.error(error);
     }
-  }, []);
+  }, [profile, user]);
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [fetchDashboardData]);
 
   const lineData = {
     labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
@@ -215,7 +315,7 @@ const Dashboard = () => {
     }
   ];
 
-  const { profile } = useAuth();
+
 
   return (
     <Layout title="Dashboard" subtitle="Resumen de tu cartera de préstamos">
@@ -242,61 +342,256 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* CHART */}
-      <div className="card" style={{ marginBottom: '16px' }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">Rendimiento Semanal</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Recaudos de los últimos 7 días</div>
+      {/* DASHBOARD CONTENT BASED ON ROLE */}
+      {profile?.rol === 'admin' ? (
+        <>
+          {/* CHART */}
+          <div className="card" style={{ marginBottom: '16px' }}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">Rendimiento Semanal</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Recaudos de los últimos 7 días</div>
+              </div>
+              <div className="chart-badge">Esta semana</div>
+            </div>
+            <div style={{ height: '210px' }}>
+              <Line data={lineData} options={lineOptions as any} />
+            </div>
           </div>
-          <div className="chart-badge">Esta semana</div>
-        </div>
-        <div style={{ height: '210px' }}>
-          <Line data={lineData} options={lineOptions as any} />
-        </div>
-      </div>
 
-      {/* BOTTOM GRID */}
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-header" style={{ marginBottom: '12px' }}>
-            <div className="card-title">Distribución</div>
-          </div>
-          <div style={{ height: '170px' }}>
-            <Doughnut data={donutData} options={donutOptions} />
-          </div>
-        </div>
+          {/* BOTTOM GRID */}
+          <div className="grid-2">
+            <div className="card">
+              <div className="card-header" style={{ marginBottom: '12px' }}>
+                <div className="card-title">Distribución</div>
+              </div>
+              <div style={{ height: '170px' }}>
+                <Doughnut data={donutData} options={donutOptions} />
+              </div>
+            </div>
 
-        <div className="card">
-          <div className="card-header" style={{ marginBottom: '12px' }}>
-            <div className="card-title">Alertas</div>
-            <span className="badge badge-danger">{stats.delinquentCount} mora</span>
+            <div className="card">
+              <div className="card-header" style={{ marginBottom: '12px' }}>
+                <div className="card-title">Alertas Globales</div>
+                <span className="badge badge-danger">{stats.delinquentCount} mora</span>
+              </div>
+              <div className="alerts-list">
+                <div className="alert-row">
+                  <div className="alert-dot red"></div>
+                  <div className="alert-info">
+                    <span className="alert-name">Juan Pérez</span>
+                    <span className="alert-meta">3 días en mora</span>
+                  </div>
+                </div>
+                <div className="alert-row">
+                  <div className="alert-dot red"></div>
+                  <div className="alert-info">
+                    <span className="alert-name">Maria Garcia</span>
+                    <span className="alert-meta">1 día en mora</span>
+                  </div>
+                </div>
+                <div className="alert-row">
+                  <div className="alert-dot yellow"></div>
+                  <div className="alert-info">
+                    <span className="alert-name">Carlos Ruiz</span>
+                    <span className="alert-meta">Vence mañana</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="alerts-list">
-            <div className="alert-row">
-              <div className="alert-dot red"></div>
-              <div className="alert-info">
-                <span className="alert-name">Juan Pérez</span>
-                <span className="alert-meta">3 días en mora</span>
-              </div>
+        </>
+      ) : (
+        <div className="collector-dashboard">
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Mis Cobros Pendientes</div>
+              <div className="badge badge-info">{assignedLoans.length} préstamos</div>
             </div>
-            <div className="alert-row">
-              <div className="alert-dot red"></div>
-              <div className="alert-info">
-                <span className="alert-name">Maria Garcia</span>
-                <span className="alert-meta">1 día en mora</span>
-              </div>
+            
+            <div className="collector-table-wrap">
+              {loadingLoans ? (
+                <div style={{ padding: '40px', textAlign: 'center' }}>Cargando tus cobros...</div>
+              ) : assignedLoans.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No tienes préstamos asignados con cuotas pendientes.
+                </div>
+              ) : (
+                <table className="collector-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Cuota Próxima</th>
+                      <th>Monto Cuota</th>
+                      <th>Prioridad</th>
+                      <th style={{ textAlign: 'right' }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignedLoans.map((loan) => (
+                      <tr key={loan.id} className={loan.es_para_hoy ? 'row-highlight' : ''}>
+                        <td>
+                          <div className="collector-client-cell">
+                            <strong>{loan.clientes.nombre}</strong>
+                            <span>{loan.clientes.identificacion}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className={`date-badge ${loan.es_para_hoy ? 'today' : ''}`}>
+                            {loan.proxima_cuota?.fecha_vencimiento || 'N/A'}
+                          </div>
+                        </td>
+                        <td>
+                          <strong>{formatCurrency(loan.proxima_cuota?.monto_cuota || 0)}</strong>
+                        </td>
+                        <td>
+                          {loan.estado === 'en_mora' ? (
+                            <span className="badge badge-danger">Urgente</span>
+                          ) : loan.es_para_hoy ? (
+                            <span className="badge badge-info">Para hoy</span>
+                          ) : (
+                            <span className="badge badge-neutral">Programado</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <Link to={`/pagos/${loan.id}`} className="btn btn-primary btn-sm">
+                            Ver
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
-            <div className="alert-row">
-              <div className="alert-dot yellow"></div>
-              <div className="alert-info">
-                <span className="alert-name">Carlos Ruiz</span>
-                <span className="alert-meta">Vence mañana</span>
+          </div>
+
+          {/* Recomendaciones/Extras para Cobradores */}
+          <div className="collector-extras mt-4">
+            <div className="grid-2">
+              <div className="card collector-promo-card teal">
+                <div className="promo-content">
+                  <h4>Mi Meta Semanal</h4>
+                  <div className="goal-stats">
+                    <div className="goal-item">
+                      <span>Meta:</span>
+                      <strong>{formatCurrency(stats.weeklyGoal)}</strong>
+                    </div>
+                    <div className="goal-item">
+                      <span>Recaudado:</span>
+                      <strong>{formatCurrency(stats.weeklyCollected)}</strong>
+                    </div>
+                  </div>
+                  {stats.weeklyGoal > 0 ? (
+                    <>
+                      <p>Has recaudado el {Math.round((stats.weeklyCollected / stats.weeklyGoal) * 100)}% de tu meta.</p>
+                      <div className="mini-progress-bar">
+                        <div className="fill" style={{ width: `${Math.min(100, (stats.weeklyCollected / stats.weeklyGoal) * 100)}%` }}></div>
+                      </div>
+                    </>
+                  ) : (
+                    <p>No tienes cuotas programadas para esta semana.</p>
+                  )}
+                </div>
+              </div>
+              <div className="card collector-promo-card purple">
+                <div className="promo-content">
+                  <h4>Consejo del Día</h4>
+                  <p>Recuerda actualizar la dirección si el cliente se ha mudado.</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      <style>{`
+        .collector-table-wrap {
+          overflow-x: auto;
+          margin-top: 16px;
+        }
+        .collector-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .collector-table th {
+          text-align: left;
+          padding: 12px;
+          border-bottom: 2px solid var(--border-light);
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        .collector-table td {
+          padding: 14px 12px;
+          border-bottom: 1px solid var(--border-light);
+          font-size: 14px;
+        }
+        .collector-client-cell {
+          display: flex;
+          flex-direction: column;
+        }
+        .collector-client-cell span {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+        .date-badge {
+          padding: 4px 8px;
+          border-radius: 6px;
+          background: #f1f5f9;
+          font-size: 12px;
+          font-weight: 600;
+          display: inline-block;
+        }
+        .date-badge.today {
+          background: #eff6ff;
+          color: #2563eb;
+          border: 1px solid #dbeafe;
+        }
+        .row-highlight {
+          background: #f8fafc;
+        }
+        .collector-promo-card {
+          padding: 20px;
+          border: none;
+          color: white;
+        }
+        .collector-promo-card.teal { background: linear-gradient(135deg, #0d9488, #14b8a6); }
+        .collector-promo-card.purple { background: linear-gradient(135deg, #7c3aed, #8b5cf6); }
+        .promo-content h4 { margin-bottom: 8px; font-weight: 700; }
+        .promo-content p { font-size: 13px; opacity: 0.9; }
+        .goal-stats {
+          display: flex;
+          gap: 16px;
+          margin-bottom: 12px;
+          background: rgba(0,0,0,0.1);
+          padding: 8px 12px;
+          border-radius: 8px;
+        }
+        .goal-item {
+          display: flex;
+          flex-direction: column;
+        }
+        .goal-item span {
+          font-size: 11px;
+          opacity: 0.8;
+          text-transform: uppercase;
+        }
+        .goal-item strong {
+          font-size: 14px;
+        }
+        .mini-progress-bar {
+          height: 6px;
+          background: rgba(255,255,255,0.2);
+          border-radius: 3px;
+          margin-top: 12px;
+          overflow: hidden;
+        }
+        .mini-progress-bar .fill {
+          height: 100%;
+          background: white;
+        }
+        .mt-4 { margin-top: 24px; }
+      `}</style>
 
 
     </Layout>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
+import Modal from '../components/Modal';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
@@ -255,110 +256,109 @@ const Payments = () => {
         })}
       </div>
 
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-content animate-fade">
-            <h3>Registrar Pago</h3>
-            <p className="text-secondary">Cuota #{activeCuota.numero_cuota}</p>
-            
-            <div className="payment-details">
-              <div className="detail-row">
-                <span>Valor Cuota:</span>
-                <span>{formatCurrency(activeCuota.monto_cuota)}</span>
-              </div>
-              <div className="detail-row">
-                <span>Interés por Mora:</span>
-                <span className="text-danger">{formatCurrency(activeCuota.current_late_fee || 0)}</span>
-              </div>
-              <hr />
-              <div className="detail-row total">
-                <span>Total Sugerido:</span>
-                <span>{formatCurrency(Number(activeCuota.monto_cuota) + (activeCuota.current_late_fee || 0))}</span>
-              </div>
-            </div>
-
-            <div className="form-group mt-4">
-              <label>Monto a Recibir</label>
-              <input 
-                type="number" 
-                value={montoRecibido} 
-                onChange={e => setMontoRecibido(Number(e.target.value))}
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button className="btn" onClick={() => setShowModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={processPayment}>Confirmar Pago</button>
-            </div>
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Registrar Pago"
+      >
+        <p className="text-secondary">Cuota #{activeCuota?.numero_cuota}</p>
+        
+        <div className="payment-details">
+          <div className="detail-row">
+            <span>Valor Cuota:</span>
+            <span>{formatCurrency(activeCuota?.monto_cuota || 0)}</span>
+          </div>
+          <div className="detail-row">
+            <span>Interés por Mora:</span>
+            <span className="text-danger">{formatCurrency(activeCuota?.current_late_fee || 0)}</span>
+          </div>
+          <hr />
+          <div className="detail-row total">
+            <span>Total Sugerido:</span>
+            <span>{formatCurrency(Number(activeCuota?.monto_cuota || 0) + (activeCuota?.current_late_fee || 0))}</span>
           </div>
         </div>
-      )}
 
-      {showReceipt && receiptData && (
-        <div className="modal-overlay">
-          <div className="modal-content animate-fade">
-            <div className="receipt-header">
-              <div className="success-badge">
-                <Check size={32} />
-              </div>
-              <h3>¡Pago Exitoso!</h3>
-              <p>El comprobante ha sido generado</p>
-            </div>
+        <div className="form-group mt-4">
+          <label>Monto a Recibir</label>
+          <input 
+            type="number" 
+            value={montoRecibido} 
+            onChange={e => setMontoRecibido(Number(e.target.value))}
+          />
+        </div>
 
-            <div className="receipt-box">
-              <div className="receipt-row">
-                <span>Empresa:</span>
-                <strong>{receiptData.empresa}</strong>
-              </div>
-              <div className="receipt-row">
-                <span>Cliente:</span>
-                <strong>{receiptData.cliente}</strong>
-              </div>
-              <div className="receipt-row">
-                <span>Concepto:</span>
-                <strong>Cuota #{receiptData.cuotaNr}</strong>
-              </div>
-              <div className="receipt-row">
-                <span>Fecha:</span>
-                <strong>{receiptData.fecha}</strong>
-              </div>
-              <hr />
-              <div className="receipt-row total">
-                <span>Monto Pagado:</span>
-                <strong>{formatCurrency(receiptData.monto)}</strong>
-              </div>
-            </div>
+        <div className="modal-actions">
+          <button className="btn btn-neutral" onClick={() => setShowModal(false)}>Cancelar</button>
+          <button className="btn btn-primary" onClick={processPayment}>Confirmar Pago</button>
+        </div>
+      </Modal>
 
-            <div className="modal-actions-vertical">
-              <button className="btn btn-primary w-full" onClick={handleSharePDF}>
-                <Share2 size={20} />
-                Descargar y Compartir PDF
-              </button>
+      <Modal
+        isOpen={showReceipt && !!receiptData}
+        onClose={() => setShowReceipt(false)}
+        title="¡Pago Exitoso!"
+      >
+        <div className="receipt-header">
+          <div className="success-badge">
+            <Check size={32} />
+          </div>
+          <p>El comprobante ha sido generado</p>
+        </div>
 
-              <button 
-                className="btn btn-whatsapp w-full"
-                onClick={() => {
-                  const message = `*RECIBO DE PAGO - ${receiptData.empresa}*%0A%0A` +
-                    `Hola *${receiptData.cliente}*, confirmamos tu pago:%0A%0A` +
-                    `✅ *Concepto:* Cuota #${receiptData.cuotaNr}%0A` +
-                    `✅ *Monto:* ${formatCurrency(receiptData.monto)}%0A` +
-                    `✅ *Fecha:* ${receiptData.fecha}%0A%0A` +
-                    `¡Gracias por tu puntualidad!`;
-                  const phone = receiptData.telefono?.replace(/\D/g, '') || '';
-                  window.open(`https://wa.me/57${phone}?text=${message}`, '_blank');
-                }}
-              >
-                <MessageSquare size={20} />
-                Enviar Mensaje WhatsApp
-              </button>
-              
-              <button className="btn btn-outline w-full" onClick={() => setShowReceipt(false)}>
-                Cerrar
-              </button>
-            </div>
+        <div className="receipt-box">
+          <div className="receipt-row">
+            <span>Empresa:</span>
+            <strong>{receiptData?.empresa}</strong>
+          </div>
+          <div className="receipt-row">
+            <span>Cliente:</span>
+            <strong>{receiptData?.cliente}</strong>
+          </div>
+          <div className="receipt-row">
+            <span>Concepto:</span>
+            <strong>Cuota #{receiptData?.cuotaNr}</strong>
+          </div>
+          <div className="receipt-row">
+            <span>Fecha:</span>
+            <strong>{receiptData?.fecha}</strong>
+          </div>
+          <hr />
+          <div className="receipt-row total">
+            <span>Monto Pagado:</span>
+            <strong>{formatCurrency(receiptData?.monto || 0)}</strong>
           </div>
         </div>
-      )}
+
+        <div className="modal-actions-vertical">
+          <button className="btn btn-primary w-full" onClick={handleSharePDF}>
+            <Share2 size={20} />
+            Descargar y Compartir PDF
+          </button>
+
+          <button 
+            className="btn btn-whatsapp w-full"
+            onClick={() => {
+              if (!receiptData) return;
+              const message = `*RECIBO DE PAGO - ${receiptData.empresa}*%0A%0A` +
+                `Hola *${receiptData.cliente}*, confirmamos tu pago:%0A%0A` +
+                `✅ *Concepto:* Cuota #${receiptData.cuotaNr}%0A` +
+                `✅ *Monto:* ${formatCurrency(receiptData.monto)}%0A` +
+                `✅ *Fecha:* ${receiptData.fecha}%0A%0A` +
+                `¡Gracias por tu puntualidad!`;
+              const phone = receiptData.telefono?.replace(/\D/g, '') || '';
+              window.open(`https://wa.me/57${phone}?text=${message}`, '_blank');
+            }}
+          >
+            <MessageSquare size={20} />
+            Enviar Mensaje WhatsApp
+          </button>
+          
+          <button className="btn btn-neutral w-full" onClick={() => setShowReceipt(false)}>
+            Cerrar
+          </button>
+        </div>
+      </Modal>
 
 
     </Layout>

@@ -3,8 +3,9 @@ import Layout from '../components/Layout';
 import Pagination from '../components/Pagination';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
-import { Search, CreditCard, Calendar, ChevronRight } from 'lucide-react';
+import { Search, CreditCard, Calendar, ChevronRight, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoansList = () => {
   const [loans, setLoans] = useState<any[]>([]);
@@ -19,9 +20,11 @@ const LoansList = () => {
   
   // Stats for tabs
   const [counts, setCounts] = useState({ todos: 0, activo: 0, en_mora: 0, pagado: 0 });
+  const { user, profile } = useAuth();
 
   const fetchLoans = async () => {
     setLoading(true);
+    if (!user) return;
     try {
       const hoy = new Date().toISOString().split('T')[0];
 
@@ -35,11 +38,23 @@ const LoansList = () => {
       const moraIds = Array.from(new Set(qMora?.map(x => x.prestamo_id) || []));
 
       // 2. Obtener contadores totales para las pestañas (Diseño anterior)
-      const { count: cTodos } = await supabase.from('prestamos').select('*', { count: 'exact', head: true });
-      const { count: cPagado } = await supabase.from('prestamos').select('*', { count: 'exact', head: true }).eq('estado', 'pagado');
+      let cQuery = supabase.from('prestamos').select('*', { count: 'exact', head: true });
+      let pQuery = supabase.from('prestamos').select('*', { count: 'exact', head: true }).eq('estado', 'pagado');
+      
+      if (profile?.rol === 'cobrador') {
+        cQuery = cQuery.eq('cobrador_id', user.id);
+        pQuery = pQuery.eq('cobrador_id', user.id);
+      }
+
+      const { count: cTodos } = await cQuery;
+      const { count: cPagado } = await pQuery;
       
       // Contar cuántos de los 'activos' están realmente en mora para ajustar el contador de "Al día"
-      const { data: prestamosActivos } = await supabase.from('prestamos').select('id').eq('estado', 'activo');
+      let aQuery = supabase.from('prestamos').select('id').eq('estado', 'activo');
+      if (profile?.rol === 'cobrador') {
+        aQuery = aQuery.eq('cobrador_id', user.id);
+      }
+      const { data: prestamosActivos } = await aQuery;
       const activosIds = (prestamosActivos || []).map(p => p.id);
       const enMoraEfecivos = moraIds.filter(id => activosIds.includes(id));
 
@@ -58,6 +73,11 @@ const LoansList = () => {
           clientes!inner (nombre, identificacion),
           planes_prestamo (nombre_plan)
         `, { count: 'exact' });
+
+      // Filtrar por cobrador si no es admin
+      if (profile?.rol === 'cobrador') {
+        query = query.eq('cobrador_id', user.id);
+      }
 
       // 4. Aplicar Búsqueda y Filtros
       if (searchTerm) {
@@ -214,6 +234,14 @@ const LoansList = () => {
                   </div>
                   {getStatusBadge(loan.estado_ui)}
                 </div>
+
+                {/* COBRADOR INFO (Solo Admins) */}
+                {profile?.rol === 'admin' && loan.cobrador_id && (
+                  <div className="loan-assignee-badge" style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
+                    <User size={12} />
+                    <span>Asignado a Cobrador</span>
+                  </div>
+                )}
 
                 {/* LOAN STATS */}
                 <div className="loan-stats-row">

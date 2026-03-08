@@ -135,6 +135,14 @@ El aplicativo utiliza las tecnologías más modernas de la industria, asegurando
 *   Perfilamiento detallado de clientes con historial crediticio interno.
 *   Búsqueda inteligente por documento o nombre.
 
+#### ✅ Vista de Perfil Detallado y Análisis Crediticio (Nuevo)
+El sistema ahora incluye una vista avanzada de 360° por cliente que permite realizar análisis de riesgo antes de otorgar nuevos créditos:
+*   **Métricas de Desempeño**: Visualización de la puntualidad del cliente basada en su historial de pagos.
+*   **Gestión de Mora**: Conteo exacto de cuotas vencidas y comportamiento frente a penalizaciones.
+*   **Análisis Predictivo de Riesgo**: Clasificación automática (Bajo, Medio, Alto) basada en algoritmos de puntualidad.
+*   **Monto Máximo Sugerido**: El sistema calcula cuánto capital se recomienda prestar al cliente en su próxima solicitud, premiando la lealtad y el buen comportamiento de pago.
+*   **Historial Consolidado**: Línea de tiempo de todos los préstamos otorgados, permitiendo ver la evolución del cliente en el tiempo.
+
 #### ✅ Configuración Flexible de Productos
 *   Creación de múltiples **Planes de Préstamo** (Ej: Plan Emprende, Diario, Oro).
 *   Personalización de tasas de interés, número de cuotas y frecuencias de pago (semanal, quincenal, mensual).
@@ -162,3 +170,44 @@ El sistema genera información estratégica para la toma de decisiones:
 Desarrollado con ❤️ para la gestión financiera moderna.
 
 
+
+---
+
+## Actualizacion: Analisis de Riesgo y Puntualidad en Clientes (2026-03-07)
+
+En el modal **Perfil del Cliente** (`src/pages/Clients.tsx`) se mejoro la lectura de riesgo y cumplimiento:
+
+### Puntualidad (mas explicita)
+- Se muestra `N/A` cuando no hay historial de cuotas pagadas (en lugar de asumir 100%).
+- Se muestra el contexto operativo junto al porcentaje:
+  - `X/Y cuotas pagadas a tiempo`.
+- Se agregan indicadores de atraso:
+  - `atraso promedio` y `atraso maximo` en dias.
+
+### Nivel de riesgo (score compuesto)
+- El riesgo ya no depende solo de puntualidad.
+- Se calcula un `riskScore` de `0 a 100` usando:
+  - puntualidad historica,
+  - cuotas en mora activa,
+  - atraso promedio y maximo,
+  - relacion `saldo activo / total prestado`,
+  - volumen de historial (numero de prestamos).
+- Clasificacion:
+  - `Bajo`: score >= 75
+  - `Medio`: score entre 50 y 74
+  - `Alto`: score < 50
+- Se muestran factores explicativos en texto para justificar el nivel calculado.
+
+### Monto maximo sugerido (ajustado por riesgo)
+- Se calcula sobre el promedio historico por prestamo.
+- Usa multiplicadores por:
+  - nivel de riesgo,
+  - puntualidad,
+  - mora activa.
+- Incluye limites minimo y maximo para evitar recomendaciones extremas.
+
+### Notas tecnicas
+- Archivos impactados:
+  - `src/pages/Clients.tsx`
+  - `src/index.css`
+- El cambio fue validado con `npm run build` sin errores de compilacion.

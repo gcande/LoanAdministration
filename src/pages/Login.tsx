@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Mail, ChevronRight, AlertCircle } from 'lucide-react';
 
 const Login = () => {
+  const appVersion = __APP_VERSION__;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -87,6 +88,7 @@ const Login = () => {
 
         <div className="login-footer">
           <p>&copy; 2024 PrestaYa Digital. Todos los derechos reservados.</p>
+          <p className="login-version">Version {appVersion}</p>
         </div>
       </div>
 
@@ -208,6 +210,13 @@ const Login = () => {
           text-align: center;
           font-size: 11px;
           color: var(--text-muted);
+        }
+
+        .login-version {
+          margin-top: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-secondary);
         }
       `}</style>
     </div>

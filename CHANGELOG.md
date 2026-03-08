@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.0 - 2026-03-08
+
+### Other
+- Merge pull request #14 from gcande/develop
+- Merge pull request #13 from gcande/versionenlogin
+- feact: Implementacion de version en login
+
 ## v0.1.0 - 2026-03-08
 
 ### Features

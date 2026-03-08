@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import Pagination from '../components/Pagination';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
+import { getLateCutoffDateIso, getTodayIsoDate } from '../utils/loanMetrics';
 import { Search, CreditCard, Calendar, ChevronRight, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,14 +27,21 @@ const LoansList = () => {
     setLoading(true);
     if (!user) return;
     try {
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoy = getTodayIsoDate();
+      const { data: graceSetting } = await supabase
+        .from('configuracion')
+        .select('valor')
+        .eq('clave', 'dias_gracia')
+        .maybeSingle();
+      const graceDays = Number(graceSetting?.valor || 0);
+      const cutoffMora = getLateCutoffDateIso(hoy, graceDays);
 
       // 1. Obtener IDs globales con mora para filtrar y contar
       const { data: qMora } = await supabase
         .from('cuotas')
         .select('prestamo_id')
         .neq('estado', 'pagado')
-        .lt('fecha_vencimiento', hoy);
+        .lt('fecha_vencimiento', cutoffMora);
       
       const moraIds = Array.from(new Set(qMora?.map(x => x.prestamo_id) || []));
 

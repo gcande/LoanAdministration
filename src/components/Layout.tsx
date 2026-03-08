@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   Home, 
@@ -8,12 +8,13 @@ import {
   PieChart,
   CreditCard,
   Settings,
-  X,
   Sliders,
   LayoutDashboard,
   ChevronRight,
   Bell,
-  UserPlus
+  UserPlus,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,10 +24,24 @@ interface LayoutProps {
   subtitle?: string;
 }
 
+const SIDEBAR_EXPANDED_WIDTH = 320;
+const SIDEBAR_COLLAPSED_WIDTH = 72;
+
 const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // Estado para sidebar colapsado en desktop - se guarda en localStorage
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebarCollapsed');
+    return saved === 'true';
+  });
+
+  // Efecto para guardar la preferencia en localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   const handleLogout = async () => {
     await signOut();
@@ -35,10 +50,19 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
+  // Toggle para colapsar/expandir en desktop
+  const toggleSidebarCollapse = () => setIsSidebarCollapsed(!isSidebarCollapsed);
+
+  // Ancho actual de la sidebar en desktop
+  const desktopSidebarWidth = isSidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
+
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      style={{ '--sidebar-width': `${desktopSidebarWidth}px` } as React.CSSProperties}
+    >
       {/* HEADER */}
-      <header className="app-header">
+      <header className={`app-header ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="app-header-left">
           <button onClick={toggleSidebar} className="header-menu-btn" aria-label="Abrir menú">
             <span className="menu-icon">
@@ -47,12 +71,17 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
               <span></span>
             </span>
           </button>
+
           <div className="header-brand">
             <div className="header-logo">P</div>
             <span className="header-brand-name">PrestaYa</span>
           </div>
         </div>
         <div className="app-header-right">
+          <NavLink to="/nuevo-prestamo" className="header-new-loan-btn desktop-only">
+            <PlusCircle size={16} />
+            <span>Nuevo Prestamo</span>
+          </NavLink>
           <button className="header-action-btn" aria-label="Notificaciones">
             <Bell size={18} />
             <span className="notif-dot"></span>
@@ -72,25 +101,22 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
       />
 
       {/* SIDEBAR */}
-      <aside className={`app-sidebar ${isSidebarOpen ? 'open' : ''}`}>
+      <aside className={`app-sidebar ${isSidebarOpen ? 'open' : ''} ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-top">
           <div className="sidebar-brand">
-            <div className="sidebar-logo">P</div>
             <div>
               <div className="sidebar-brand-name">PrestaYa</div>
               <div className="sidebar-brand-tag">Sistema de Cartera</div>
             </div>
           </div>
-          <button onClick={toggleSidebar} className="sidebar-close-btn" aria-label="Cerrar menú">
-            <X size={20} />
+          {/* Botón de colapsar sidebar en desktop */}
+          <button onClick={toggleSidebarCollapse} className="sidebar-toggle-btn desktop-only" aria-label={isSidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}>
+            {isSidebarCollapsed ? <PanelLeft size={20} /> : <PanelLeftClose size={20} />}
           </button>
         </div>
 
         {/* PERFIL DE USUARIO EN SIDEBAR */}
         <div className="sidebar-user-profile">
-          <div className="user-avatar-small">
-            {user?.email?.charAt(0).toUpperCase()}
-          </div>
           <div className="user-details">
             <span className="user-email">{user?.email}</span>
             <span className={`user-role-tag ${profile?.rol}`}>
@@ -353,6 +379,60 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           background: var(--danger-light);
           border-color: #fecaca;
           color: var(--danger);
+        }
+
+        .header-new-loan-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          text-decoration: none;
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          color: white;
+          border: 1px solid #1d4ed8;
+          padding: 8px 14px;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 700;
+          transition: var(--transition);
+        }
+
+        .header-new-loan-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+        }
+
+        /* ========================
+           SIDEBAR TOGGLE BUTTON (DESKTOP)
+        ======================== */
+        .sidebar-toggle-btn {
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
+          color: var(--text-secondary);
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: var(--transition);
+          flex-shrink: 0;
+        }
+
+        .sidebar-toggle-btn:hover {
+          background: var(--secondary-light);
+          border-color: var(--secondary-mid);
+          color: var(--secondary);
+        }
+
+        .desktop-only {
+          display: none;
+        }
+
+        @media (min-width: 1024px) {
+          .desktop-only {
+            display: flex;
+          }
         }
 
         /* ========================
@@ -742,16 +822,17 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
            DESKTOP / WEB ADJUSTMENTS
            ======================== */
         @media (min-width: 1024px) {
-          /* Mantener la sidebar abierta y fija */
+          /* Mantener la sidebar abierta y fija - estado expandido */
           .app-sidebar {
             transform: translateX(0) !important;
             position: fixed;
             left: 0;
             top: 0;
             bottom: 0;
-            width: 320px;
+            width: var(--sidebar-width, 320px);
             z-index: 900;
             box-shadow: none;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           }
 
           /* No mostrar overlay en escritorio */
@@ -768,15 +849,19 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
 
           /* Ajustar cabecera para dejar espacio a la sidebar */
           .app-header {
-            padding-left: 360px;
+            margin-left: var(--sidebar-width, 320px);
+            width: calc(100% - var(--sidebar-width, 320px));
+            padding: 0 28px;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           }
 
           /* Contenido principal desplazado a la derecha de la sidebar */
           .app-main {
-            margin-left: 360px;
-            max-width: calc(100% - 360px);
+            margin-left: var(--sidebar-width, 320px);
+            max-width: calc(100% - var(--sidebar-width, 320px));
             padding: 40px 48px;
             padding-bottom: calc(var(--nav-height) + 40px);
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           }
 
           /* Ocultar navegación inferior en pantallas grandes */
@@ -787,6 +872,55 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           /* Aumentar tamaño del título en escritorio */
           .page-title {
             font-size: 28px;
+          }
+
+          /* Estilos para sidebar colapsada */
+          .app-sidebar.collapsed {
+            width: 72px;
+          }
+
+          /* Ocultar texto y ajustar elementos cuando está colapsado */
+          .app-sidebar.collapsed .sidebar-brand-name,
+          .app-sidebar.collapsed .sidebar-brand-tag,
+          .app-sidebar.collapsed .sidebar-section-label,
+          .app-sidebar.collapsed .sidebar-link span,
+          .app-sidebar.collapsed .sidebar-link-arrow,
+          .app-sidebar.collapsed .sidebar-user-profile .user-details,
+          .app-sidebar.collapsed .sidebar-footer .sidebar-logout-btn span {
+            display: none;
+          }
+
+          /* Centrar iconos cuando está colapsado */
+          .app-sidebar.collapsed .sidebar-top {
+            justify-content: center;
+            padding: 20px 8px;
+          }
+
+          .app-sidebar.collapsed .sidebar-brand {
+            justify-content: center;
+          }
+
+          .app-sidebar.collapsed .sidebar-close-btn {
+            display: none;
+          }
+
+          .app-sidebar.collapsed .sidebar-link {
+            justify-content: center;
+            padding: 11px;
+          }
+
+          .app-sidebar.collapsed .sidebar-user-profile {
+            justify-content: center;
+            padding: 12px 8px;
+          }
+
+          .app-sidebar.collapsed .sidebar-footer .sidebar-logout-btn {
+            justify-content: center;
+            padding: 11px;
+          }
+
+          .app-sidebar.collapsed .sidebar-body {
+            padding: 16px 8px;
           }
         }
       `}</style>

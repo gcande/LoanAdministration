@@ -211,3 +211,35 @@ En el modal **Perfil del Cliente** (`src/pages/Clients.tsx`) se mejoro la lectur
   - `src/pages/Clients.tsx`
   - `src/index.css`
 - El cambio fue validado con `npm run build` sin errores de compilacion.
+
+---
+
+## Versionamiento y Releases
+
+Este proyecto tiene una base de versionamiento con:
+- `VERSIONING.md`: politica de ramas, semver y convencion de commits.
+- `CHANGELOG.md`: historial de cambios por version.
+- `scripts/release.mjs`: flujo automatizado de release local.
+- `scripts/update-changelog.mjs`: actualizacion automatica del changelog.
+
+Comandos:
+
+```bash
+npm run release:patch
+npm run release:minor
+npm run release:major
+```
+
+Cada comando:
+1. ejecuta `npm run build`
+2. aumenta version en `package.json` y `package-lock.json`
+3. actualiza `CHANGELOG.md`
+4. crea commit `chore(release): vX.Y.Z`
+5. crea tag `vX.Y.Z`
+
+Para publicar:
+
+```bash
+git push
+git push --tags
+```

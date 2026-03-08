@@ -29,6 +29,14 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useAuth } from '../contexts/AuthContext';
 
+type GlobalAlert = {
+  loanId: number;
+  clientName: string;
+  severity: 'red' | 'yellow';
+  message: string;
+  priority: number;
+};
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -54,6 +62,7 @@ const Dashboard = () => {
     weeklyCollected: 0
   });
   const [assignedLoans, setAssignedLoans] = useState<any[]>([]);
+  const [globalAlerts, setGlobalAlerts] = useState<GlobalAlert[]>([]);
   const [loadingLoans, setLoadingLoans] = useState(false);
   const { user, profile } = useAuth();
 
@@ -99,6 +108,76 @@ const Dashboard = () => {
         weeklyGoal: 0,
         weeklyCollected: 0
       });
+
+      if (profile?.rol === 'admin') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const { data: alertLoans } = await supabase
+          .from('prestamos')
+          .select(`
+            id,
+            estado,
+            clientes (nombre),
+            cuotas (fecha_vencimiento, estado)
+          `)
+          .in('estado', ['activo', 'en_mora'])
+          .order('created_at', { ascending: false })
+          .limit(200);
+
+        const parsedAlerts = (alertLoans || []).map((loan: any) => {
+          const nextCuota = (loan.cuotas || [])
+            .filter((c: any) => c.estado !== 'pagado')
+            .sort((a: any, b: any) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime())[0];
+
+          if (!nextCuota?.fecha_vencimiento) return null;
+
+          const dueDate = new Date(`${nextCuota.fecha_vencimiento}T00:00:00`);
+          const diffDays = Math.floor((dueDate.getTime() - today.getTime()) / 86400000);
+
+          if (diffDays < 0) {
+            const overdueDays = Math.abs(diffDays);
+            return {
+              loanId: loan.id,
+              clientName: loan.clientes?.nombre || 'Cliente sin nombre',
+              severity: 'red' as const,
+              message: `${overdueDays} ${overdueDays === 1 ? 'dia' : 'dias'} en mora`,
+              priority: 300 + overdueDays
+            };
+          }
+
+          if (diffDays === 0) {
+            return {
+              loanId: loan.id,
+              clientName: loan.clientes?.nombre || 'Cliente sin nombre',
+              severity: 'red' as const,
+              message: 'Vence hoy',
+              priority: 200
+            };
+          }
+
+          if (diffDays === 1) {
+            return {
+              loanId: loan.id,
+              clientName: loan.clientes?.nombre || 'Cliente sin nombre',
+              severity: 'yellow' as const,
+              message: 'Vence manana',
+              priority: 100
+            };
+          }
+
+          return null;
+        })
+        .filter(Boolean) as GlobalAlert[];
+
+        setGlobalAlerts(
+          parsedAlerts
+            .sort((a, b) => b.priority - a.priority)
+            .slice(0, 5)
+        );
+      } else {
+        setGlobalAlerts([]);
+      }
 
       // Rango de la semana actual (Lunes a Domingo)
       const now = new Date();
@@ -319,10 +398,12 @@ const Dashboard = () => {
 
   return (
     <Layout title="Dashboard" subtitle="Resumen de tu cartera de préstamos">
-      <span className={`role-badge dashboard ${profile?.rol}`}>
-        {profile?.rol === 'admin' ? <Shield size={12} /> : <User size={12} />}
-        {profile?.rol === 'admin' ? 'Administrador' : 'Cobrador'}
-      </span>
+      <div className="dashboard-role-row">
+        <span className={`role-badge dashboard ${profile?.rol}`}>
+          {profile?.rol === 'admin' ? <Shield size={12} /> : <User size={12} />}
+          {profile?.rol === 'admin' ? 'Administrador' : 'Cobrador'}
+        </span>
+      </div>
       {/* STAT CARDS */}
       <div className="stats-row">
         {statCards.map((card, i) => (
@@ -373,30 +454,31 @@ const Dashboard = () => {
             <div className="card">
               <div className="card-header" style={{ marginBottom: '12px' }}>
                 <div className="card-title">Alertas Globales</div>
-                <span className="badge badge-danger">{stats.delinquentCount} mora</span>
+                <span className="badge badge-danger">{globalAlerts.length} alertas</span>
               </div>
               <div className="alerts-list">
-                <div className="alert-row">
-                  <div className="alert-dot red"></div>
-                  <div className="alert-info">
-                    <span className="alert-name">Juan Pérez</span>
-                    <span className="alert-meta">3 días en mora</span>
+                {globalAlerts.length === 0 ? (
+                  <div className="alert-row">
+                    <div className="alert-dot yellow"></div>
+                    <div className="alert-info">
+                      <span className="alert-name">Sin alertas activas</span>
+                      <span className="alert-meta">No hay cuotas urgentes para hoy o manana</span>
+                    </div>
                   </div>
-                </div>
-                <div className="alert-row">
-                  <div className="alert-dot red"></div>
-                  <div className="alert-info">
-                    <span className="alert-name">Maria Garcia</span>
-                    <span className="alert-meta">1 día en mora</span>
-                  </div>
-                </div>
-                <div className="alert-row">
-                  <div className="alert-dot yellow"></div>
-                  <div className="alert-info">
-                    <span className="alert-name">Carlos Ruiz</span>
-                    <span className="alert-meta">Vence mañana</span>
-                  </div>
-                </div>
+                ) : (
+                  globalAlerts.map((alert) => (
+                    <div className="alert-row" key={`alert-${alert.loanId}-${alert.clientName}`}>
+                      <div className={`alert-dot ${alert.severity}`}></div>
+                      <div className="alert-info">
+                        <span className="alert-name">{alert.clientName}</span>
+                        <span className="alert-meta">{alert.message}</span>
+                      </div>
+                      <Link to={`/pagos/${alert.loanId}`} className="alert-action-link">
+                        Ver
+                      </Link>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -506,6 +588,22 @@ const Dashboard = () => {
       )}
 
       <style>{`
+        .dashboard-role-row {
+          margin-bottom: 12px;
+        }
+        .dashboard-role-row .role-badge.dashboard {
+          position: static;
+        }
+        .alert-action-link {
+          margin-left: auto;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--primary);
+          text-decoration: none;
+        }
+        .alert-action-link:hover {
+          text-decoration: underline;
+        }
         .collector-table-wrap {
           overflow-x: auto;
           margin-top: 16px;
@@ -599,4 +697,7 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+
+
 

@@ -341,9 +341,7 @@ button {
 }
 
 .role-badge.dashboard {
-  position: relative;
-  left: 122px;
-  top: -74px;
+  position: static;
 }
 
 .role-badge {

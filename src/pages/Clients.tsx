@@ -360,9 +360,9 @@ const Clients = () => {
                     {cliente.estado}
                   </span>
                   <div className="dropdown-container">
-                    <button className="btn-icon text-primary" onClick={() => fetchClientDetails(cliente)} title="Ver detalles" aria-label={`Ver detalles de ${cliente.nombre}`}>
+                    {/* <button className="btn-icon text-primary" onClick={() => fetchClientDetails(cliente)} title="Ver detalles" aria-label={`Ver detalles de ${cliente.nombre}`}>
                       <Eye size={20} />
-                    </button>
+                    </button> */}
                     <button className="btn-icon" onClick={() => setActiveMenu(activeMenu === cliente.id ? null : cliente.id)} aria-label={`Abrir acciones de ${cliente.nombre}`}>
                       <MoreVertical size={20} />
                     </button>

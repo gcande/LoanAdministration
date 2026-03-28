@@ -2,16 +2,45 @@ import { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { Save, RefreshCw } from 'lucide-react';
+import { setStoredCurrency } from '../utils/finance';
+
+const DEFAULT_CURRENCY = 'COP';
+const CURRENCY_OPTIONS = ['COP', 'USD'];
 
 const Config = () => {
   const [settings, setSettings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const ensureCurrencySetting = async (current: any[]) => {
+    const existing = current.find(s => s.clave === 'divisa');
+    if (existing) {
+      if (existing.valor) {
+        setStoredCurrency(existing.valor);
+      }
+      return current;
+    }
+
+    const { data, error } = await supabase
+      .from('configuracion')
+      .insert([{
+        clave: 'divisa',
+        valor: DEFAULT_CURRENCY,
+        descripcion: 'Divisa usada para el formato de montos del sistema'
+      }])
+      .select()
+      .single();
+
+    if (error || !data) return current;
+    setStoredCurrency(data.valor);
+    return [...current, data].sort((a, b) => (a.clave || '').localeCompare(b.clave || ''));
+  };
+
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('configuracion').select('*').order('clave');
-    setSettings(data || []);
+    const next = await ensureCurrencySetting(data || []);
+    setSettings(next || []);
     setLoading(false);
   }, []);
 
@@ -80,6 +109,21 @@ const Config = () => {
                       )}
                     </div>
                   </>
+                ) : s.clave === 'divisa' ? (
+                  <select
+                    value={(s.valor || DEFAULT_CURRENCY).toUpperCase()}
+                    onChange={e => {
+                      const newValue = e.target.value;
+                      const newSettings = [...settings];
+                      newSettings[idx].valor = newValue;
+                      setSettings(newSettings);
+                      setStoredCurrency(newValue);
+                    }}
+                  >
+                    {CURRENCY_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
                 ) : (
                   <input 
                     type="text" 

@@ -7,6 +7,41 @@ export interface AmortizationRow {
   fecha_vencimiento: string;
 }
 
+const DEFAULT_CURRENCY = 'COP';
+const CURRENCY_STORAGE_KEY = 'system_currency';
+const ALLOWED_CURRENCIES = new Set(['COP', 'USD']);
+
+export function getStoredCurrency(): string {
+  if (typeof window === 'undefined') return DEFAULT_CURRENCY;
+  try {
+    const raw = localStorage.getItem(CURRENCY_STORAGE_KEY);
+    if (!raw) return DEFAULT_CURRENCY;
+    const normalized = raw.trim().toUpperCase();
+    return ALLOWED_CURRENCIES.has(normalized) ? normalized : DEFAULT_CURRENCY;
+  } catch {
+    return DEFAULT_CURRENCY;
+  }
+}
+
+export function setStoredCurrency(currency: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const normalized = currency.trim().toUpperCase();
+    const value = ALLOWED_CURRENCIES.has(normalized) ? normalized : DEFAULT_CURRENCY;
+    localStorage.setItem(CURRENCY_STORAGE_KEY, value);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function getCurrencyLocale(currency: string) {
+  return currency === 'USD' ? 'en-US' : 'es-CO';
+}
+
+function getCurrencyFractionDigits(currency: string) {
+  return currency === 'USD' ? 2 : 0;
+}
+
 export function calculateAmortization(
   monto: number,
   tasaAnual: number,
@@ -78,10 +113,15 @@ export function calculateAmortization(
   return schedule;
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('es-CO', {
+export function formatCurrency(amount: number, currency?: string): string {
+  const resolved = (currency ?? getStoredCurrency()).toUpperCase();
+  const safeCurrency = ALLOWED_CURRENCIES.has(resolved) ? resolved : DEFAULT_CURRENCY;
+  const fractionDigits = getCurrencyFractionDigits(safeCurrency);
+
+  return new Intl.NumberFormat(getCurrencyLocale(safeCurrency), {
     style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0
+    currency: safeCurrency,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
   }).format(amount);
 }

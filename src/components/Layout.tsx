@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { 
+import {
   Home, 
   Users, 
   PlusCircle, 
@@ -17,6 +17,8 @@ import {
   PanelLeft
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBusinessName } from '../hooks/useBusinessName';
+import { useSystemCurrency } from '../hooks/useSystemCurrency';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -30,6 +32,8 @@ const SIDEBAR_COLLAPSED_WIDTH = 72;
 const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
+  const businessName = useBusinessName();
+  useSystemCurrency();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Estado para sidebar colapsado en desktop - se guarda en localStorage
@@ -73,8 +77,8 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           </button>
 
           <div className="header-brand">
-            <div className="header-logo">P</div>
-            <span className="header-brand-name">PrestaYa</span>
+            <div className="header-logo">{businessName.charAt(0).toUpperCase()}</div>
+            <span className="header-brand-name">{businessName}</span>
           </div>
         </div>
         <div className="app-header-right">
@@ -105,7 +109,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
         <div className="sidebar-top">
           <div className="sidebar-brand">
             <div>
-              <div className="sidebar-brand-name">PrestaYa</div>
+              <div className="sidebar-brand-name">{businessName}</div>
               <div className="sidebar-brand-tag">Sistema de Cartera</div>
             </div>
           </div>
@@ -756,6 +760,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           border-radius: 16px;
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 12px;
           border: 1px solid var(--border-light);
         }

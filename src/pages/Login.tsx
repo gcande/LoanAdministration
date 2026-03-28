@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Mail, ChevronRight, AlertCircle } from 'lucide-react';
+import { useBusinessName } from '../hooks/useBusinessName';
 
 const Login = () => {
   const appVersion = __APP_VERSION__;
+  const businessName = useBusinessName();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,7 +41,7 @@ const Login = () => {
             <div className="logo-icon">
               <Lock size={24} />
             </div>
-            <h1>Presta<span>Ya</span></h1>
+            <h1>{businessName}</h1>
           </div>
           <p>Gestión Integral de Cartera</p>
         </div>
@@ -87,7 +89,7 @@ const Login = () => {
         </form>
 
         <div className="login-footer">
-          <p>&copy; 2024 PrestaYa Digital. Todos los derechos reservados.</p>
+          <p>&copy; 2024 {businessName}. Todos los derechos reservados.</p>
           <p className="login-version">Version {appVersion}</p>
         </div>
       </div>

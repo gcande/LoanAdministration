@@ -8,7 +8,8 @@ import {
   ArrowUpRight,
   DollarSign,
   Shield,
-  User
+  User,
+  Eye
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/finance';
@@ -536,8 +537,8 @@ const Dashboard = () => {
                           )}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <Link to={`/pagos/${loan.id}`} className="btn btn-primary btn-sm">
-                            Ver
+                          <Link to={`/pagos/${loan.id}`} className="btn-icon text-primary">
+                            <Eye size={20} />
                           </Link>
                         </td>
                       </tr>
@@ -574,12 +575,6 @@ const Dashboard = () => {
                   ) : (
                     <p>No tienes cuotas programadas para esta semana.</p>
                   )}
-                </div>
-              </div>
-              <div className="card collector-promo-card purple">
-                <div className="promo-content">
-                  <h4>Consejo del Día</h4>
-                  <p>Recuerda actualizar la dirección si el cliente se ha mudado.</p>
                 </div>
               </div>
             </div>

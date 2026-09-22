@@ -12,11 +12,8 @@ export const useSystemCurrency = () => {
 
     const fetchCurrency = async () => {
       try {
-        const { data, error } = await fetchConfigByClave(CONFIG_KEY);
-
-        if (error) return;
-
-        const value = data?.trim().toUpperCase();
+        const rawValue = await fetchConfigByClave(CONFIG_KEY);
+        const value = rawValue?.trim().toUpperCase();
         if (!value) return;
 
         setStoredCurrency(value);

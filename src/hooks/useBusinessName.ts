@@ -13,11 +13,8 @@ export const useBusinessName = () => {
   useEffect(() => {
     const fetchBusinessName = async () => {
       try {
-        const { data, error } = await fetchConfigByClave('nombre_empresa');
-
-        if (error) return;
-
-        const name = data?.trim();
+        const value = await fetchConfigByClave('nombre_empresa');
+        const name = value?.trim();
         if (!name) return;
 
         setBusinessName(name);

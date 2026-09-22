@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0 - 2026-09-22
+
+### Features
+- feat: add useSystemCurrency and useBusinessName hooks
+- feat: implement core application pages, Supabase service layer, password-change edge function, and unit tests
+- feat: Añadir hooks para gestionar el nombre del negocio y la divisa del sistema, y actualizar componentes para utilizarlos
+
+# Changelog
+
 ## v0.2.0 - 2026-07-02
 
 ### Features

@@ -1,45 +1,26 @@
 import { useEffect, useState, useCallback } from 'react';
-import Layout from '../components/Layout';
-import { supabase } from '../lib/supabase';
-import { Save, RefreshCw } from 'lucide-react';
-import { setStoredCurrency } from '../utils/finance';
+import Layout from "../components/Layout";
+import { Save, RefreshCw } from "lucide-react";
+import { setStoredCurrency } from "../utils/finance";
+import {
+  ensureCurrencySetting,
+  fetchConfiguracionList,
+  updateConfiguracion,
+} from "../services";
+import type { Configuracion } from "../services/types";
 
-const DEFAULT_CURRENCY = 'COP';
-const CURRENCY_OPTIONS = ['COP', 'USD'];
+const DEFAULT_CURRENCY = "COP";
+const CURRENCY_OPTIONS = ["COP", "USD"];
 
 const Config = () => {
-  const [settings, setSettings] = useState<any[]>([]);
+  const [settings, setSettings] = useState<Configuracion[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const ensureCurrencySetting = async (current: any[]) => {
-    const existing = current.find(s => s.clave === 'divisa');
-    if (existing) {
-      if (existing.valor) {
-        setStoredCurrency(existing.valor);
-      }
-      return current;
-    }
-
-    const { data, error } = await supabase
-      .from('configuracion')
-      .insert([{
-        clave: 'divisa',
-        valor: DEFAULT_CURRENCY,
-        descripcion: 'Divisa usada para el formato de montos del sistema'
-      }])
-      .select()
-      .single();
-
-    if (error || !data) return current;
-    setStoredCurrency(data.valor);
-    return [...current, data].sort((a, b) => (a.clave || '').localeCompare(b.clave || ''));
-  };
-
   const fetchSettings = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('configuracion').select('*').order('clave');
-    const next = await ensureCurrencySetting(data || []);
+    const data = await fetchConfiguracionList();
+    const next = await ensureCurrencySetting(data);
     setSettings(next || []);
     setLoading(false);
   }, []);
@@ -49,11 +30,8 @@ const Config = () => {
   }, [fetchSettings]);
 
   const handleUpdate = async (id: string, valor: string) => {
-    const { error } = await supabase
-      .from('configuracion')
-      .update({ valor, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    
+    const { error } = await updateConfiguracion(id, valor);
+
     if (error) {
       throw error;
     }
@@ -65,9 +43,9 @@ const Config = () => {
       for (const s of settings) {
         await handleUpdate(s.id, s.valor);
       }
-      alert('Configuración guardada correctamente');
-    } catch (e) {
-      alert('Error al guardar algunos cambios');
+      alert("Configuración guardada correctamente");
+    } catch {
+      alert("Error al guardar algunos cambios");
     } finally {
       setSaving(false);
     }
@@ -78,21 +56,23 @@ const Config = () => {
   return (
     <Layout title="Configuración del Sistema">
       <div className="card animate-fade">
-        <p className="text-secondary mb-6">Ajusta los parámetros generales de operación de tu negocio.</p>
-        
+        <p className="text-secondary mb-6">
+          Ajusta los parámetros generales de operación de tu negocio.
+        </p>
+
         <div className="settings-list">
           {settings.map((s, idx) => (
             <div key={s.id} className="setting-item">
               <div className="setting-info">
-                <strong>{s.clave.replace(/_/g, ' ').toUpperCase()}</strong>
+                <strong>{s.clave.replace(/_/g, " ").toUpperCase()}</strong>
                 <p>{s.descripcion}</p>
               </div>
               <div className="setting-input">
-                {s.clave === 'sistema_amortizacion' ? (
+                {s.clave === "sistema_amortizacion" ? (
                   <>
-                    <select 
+                    <select
                       value={s.valor}
-                      onChange={e => {
+                      onChange={(e) => {
                         const newSettings = [...settings];
                         newSettings[idx].valor = e.target.value;
                         setSettings(newSettings);
@@ -102,17 +82,25 @@ const Config = () => {
                       <option value="flat">Sistema Flat (Simple)</option>
                     </select>
                     <div className="system-help">
-                      {s.valor === 'frances' ? (
-                        <p><strong>Francés:</strong> Las cuotas son constantes pero el interés se calcula sobre el saldo pendiente. El interés total es menor.</p>
+                      {s.valor === "frances" ? (
+                        <p>
+                          <strong>Francés:</strong> Las cuotas son constantes
+                          pero el interés se calcula sobre el saldo pendiente.
+                          El interés total es menor.
+                        </p>
                       ) : (
-                        <p><strong>Flat:</strong> El interés se calcula siempre sobre el monto inicial. Ideal para microcréditos de cálculo rápido.</p>
+                        <p>
+                          <strong>Flat:</strong> El interés se calcula siempre
+                          sobre el monto inicial. Ideal para microcréditos de
+                          cálculo rápido.
+                        </p>
                       )}
                     </div>
                   </>
-                ) : s.clave === 'divisa' ? (
+                ) : s.clave === "divisa" ? (
                   <select
                     value={(s.valor || DEFAULT_CURRENCY).toUpperCase()}
-                    onChange={e => {
+                    onChange={(e) => {
                       const newValue = e.target.value;
                       const newSettings = [...settings];
                       newSettings[idx].valor = newValue;
@@ -120,15 +108,17 @@ const Config = () => {
                       setStoredCurrency(newValue);
                     }}
                   >
-                    {CURRENCY_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
+                    {CURRENCY_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
                     ))}
                   </select>
                 ) : (
-                  <input 
-                    type="text" 
-                    value={s.valor} 
-                    onChange={e => {
+                  <input
+                    type="text"
+                    value={s.valor}
+                    onChange={(e) => {
                       const newSettings = [...settings];
                       newSettings[idx].valor = e.target.value;
                       setSettings(newSettings);
@@ -140,13 +130,17 @@ const Config = () => {
           ))}
         </div>
 
-        <button 
-          className="btn btn-primary w-full mt-8" 
-          onClick={saveAll} 
+        <button
+          className="btn btn-primary w-full mt-8"
+          onClick={saveAll}
           disabled={saving}
         >
-          {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-          {saving ? 'Guardando...' : 'Guardar Cambios Globales'}
+          {saving ? (
+            <RefreshCw className="animate-spin" size={20} />
+          ) : (
+            <Save size={20} />
+          )}
+          {saving ? "Guardando..." : "Guardar Cambios Globales"}
         </button>
       </div>
 

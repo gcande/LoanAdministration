@@ -2,15 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
-import { supabase } from '../lib/supabase';
-import { createClient } from '@supabase/supabase-js';
-import { 
-  UserPlus, 
-  Search, 
-  Shield, 
-  User, 
-  Trash2, 
-  Mail, 
+import {
+  UserPlus,
+  Search,
+  Shield,
+  User,
+  Trash2,
+  Mail,
   Key,
   CheckCircle2,
   AlertCircle,
@@ -20,32 +18,44 @@ import {
   BarChart3,
   Pencil,
   Lock,
-  MoreVertical
-} from 'lucide-react';
-import { formatCurrency } from '../utils/finance';
+  MoreVertical,
+} from "lucide-react";
+import { formatCurrency } from "../utils/finance";
+import {
+  asignarPrestamoCobrador,
+  cambiarPasswordUsuario,
+  createAdminClient,
+  createUsuario,
+  fetchCollectorStats,
+  fetchPerfiles,
+  fetchPrestamosParaAsignar,
+  softDeletePerfil,
+  updatePerfilRol,
+  upsertPerfil,
+} from "../services";
 
 interface UserProfile {
   id: string;
   email: string;
-  rol: 'admin' | 'cobrador';
+  rol: "admin" | "cobrador";
   created_at: string;
 }
 
 const Users = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+
   // Pagination & Search states
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
 
   // Form states
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newRol, setNewRol] = useState<'admin' | 'cobrador'>('cobrador');
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRol, setNewRol] = useState<"admin" | "cobrador">("cobrador");
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState(false);
@@ -55,7 +65,7 @@ const Users = () => {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [availableLoans, setAvailableLoans] = useState<any[]>([]);
   const [assignLoading, setAssignLoading] = useState(false);
-  const [assignSearch, setAssignSearch] = useState('');
+  const [assignSearch, setAssignSearch] = useState("");
 
   // Detail states
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -64,44 +74,22 @@ const Users = () => {
 
   // Edit states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editPassword, setEditPassword] = useState('');
+  const [editPassword, setEditPassword] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   // Cliente especial para crear usuarios sin cerrar la sesión del admin
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-  
-  const authAdminClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false
-    }
-  });
+  const authAdminClient = createAdminClient();
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    
-    let query = supabase
-      .from('perfiles')
-      .select('*', { count: 'exact' })
-      .is('deleted_at', null);
 
-    if (searchTerm) {
-      query = query.ilike('email', `%${searchTerm}%`);
-    }
+    const { data, count } = await fetchPerfiles({ page, pageSize }, searchTerm);
 
-    const { data: profiles, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range((page - 1) * pageSize, page * pageSize - 1);
-
-    if (!error) {
-      setUsers(profiles || []);
-      setTotalCount(count || 0);
-    }
+    setUsers((data as UserProfile[]) || []);
+    setTotalCount(count);
     setLoading(false);
   }, [page, searchTerm, pageSize]);
 
@@ -114,12 +102,15 @@ const Users = () => {
   // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (activeMenu && !(event.target as Element).closest('.dropdown-container')) {
+      if (
+        activeMenu &&
+        !(event.target as Element).closest(".dropdown-container")
+      ) {
         setActiveMenu(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activeMenu]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -128,36 +119,38 @@ const Users = () => {
     setFormError(null);
     setFormSuccess(false);
 
-    // 1. Crear el usuario usando el cliente especial (no afecta la sesión actual)
-    const { data, error: authError } = await authAdminClient.auth.signUp({
+    const { user: createdUser, error: createError } = await createUsuario({
       email: newEmail,
       password: newPassword,
+      rol: newRol,
     });
 
-    if (authError) {
-      setFormError(authError.message);
+    if (createError) {
+      setFormError(
+        typeof createError === "string"
+          ? createError
+          : (createError as any)?.message || "Error al crear el usuario",
+      );
       setFormLoading(false);
       return;
     }
 
-    // 2. Asegurar que el perfil tenga el rol correcto inmediatamente
-    if (data.user) {
-      // Usamos upsert por si el trigger tardó un poco o falló
-      const { error: profileError } = await supabase
-        .from('perfiles')
-        .upsert({ 
-          id: data.user.id, 
-          email: newEmail, 
-          rol: newRol 
-        });
-        
-      if (profileError) console.error('Error al asegurar perfil:', profileError);
+    // Si el trigger no creó el perfil, aseguramos upsert
+    if (createdUser && authAdminClient) {
+      const { error: profileError } = await upsertPerfil({
+        id: (createdUser as any).id,
+        email: newEmail,
+        rol: newRol,
+      });
+
+      if (profileError)
+        console.error("Error al asegurar perfil:", profileError);
     }
 
     setFormSuccess(true);
     setFormLoading(false);
-    setNewEmail('');
-    setNewPassword('');
+    setNewEmail("");
+    setNewPassword("");
     setTimeout(() => {
       setIsModalOpen(false);
       setFormSuccess(false);
@@ -167,13 +160,9 @@ const Users = () => {
 
   const handleUpdateRole = async (userId: string, currentRole: string) => {
     // El admin no se le podra cambiar el rol
-    if (currentRole === 'admin') return;
-    // const newRole = currentRole === 'cobrador' ? 'admin' : 'cobrador';
-    const newRole = currentRole;
-    const { error } = await supabase
-      .from('perfiles')
-      .update({ rol: newRole })
-      .eq('id', userId);
+    if (currentRole === "admin") return;
+    const newRole = currentRole as "admin" | "cobrador";
+    const { error } = await updatePerfilRol(userId, newRole);
 
     if (!error) {
       fetchUsers();
@@ -184,19 +173,8 @@ const Users = () => {
     setSelectedUser(user);
     setIsAssignModalOpen(true);
     setAssignLoading(true);
-    
-    // Fetch all active loans with client info
-    const { data, error } = await supabase
-      .from('prestamos')
-      .select(`
-        id, 
-        monto_prestado, 
-        saldo_pendiente, 
-        cobrador_id,
-        clientes (nombre, identificacion)
-      `)
-      .neq('estado', 'pagado')
-      .order('created_at', { ascending: false });
+
+    const { data, error } = await fetchPrestamosParaAsignar();
 
     if (!error) {
       setAvailableLoans(data || []);
@@ -207,14 +185,18 @@ const Users = () => {
   const toggleLoanAssignment = async (loanId: string, isAssigned: boolean) => {
     if (!selectedUser) return;
 
-    const { error } = await supabase
-      .from('prestamos')
-      .update({ cobrador_id: isAssigned ? null : selectedUser.id })
-      .eq('id', loanId);
+    const { error } = await asignarPrestamoCobrador(
+      loanId,
+      isAssigned ? null : selectedUser.id,
+    );
 
     if (!error) {
-      setAvailableLoans(prev => 
-        prev.map(l => l.id === loanId ? { ...l, cobrador_id: isAssigned ? null : selectedUser.id } : l)
+      setAvailableLoans((prev) =>
+        prev.map((l) =>
+          l.id === loanId
+            ? { ...l, cobrador_id: isAssigned ? null : selectedUser.id }
+            : l,
+        ),
       );
     }
   };
@@ -225,74 +207,13 @@ const Users = () => {
     setDetailLoading(true);
 
     try {
-      // 1. Obtener préstamos asignados al cobrador
-      const { data: assignedLoans } = await supabase
-        .from('prestamos')
-        .select('id, saldo_pendiente, monto_prestado, estado')
-        .eq('cobrador_id', user.id);
-
-      const loans = assignedLoans || [];
-      const loanIds = loans.map(l => l.id);
-      
-      // Métricas base de préstamos
-      const totalCartera = loans.reduce((acc, curr) => acc + Number(curr.saldo_pendiente), 0);
-      const moraCount = loans.filter(l => l.estado === 'en_mora').length;
-
-      // 2. Obtener datos de RECAUDO (Pagos)
-      let totalRecaudado = 0;
-      let totalCobros = 0;
-      let recaudoHoy = 0;
-      
-      const hoyStart = new Date();
-      hoyStart.setHours(0,0,0,0);
-      const hoyEnd = new Date();
-      hoyEnd.setHours(23,59,59,999);
-
-      if (loanIds.length > 0) {
-        // Todos los pagos históricos de sus préstamos
-        const { data: allPayments } = await supabase
-          .from('pagos')
-          .select('monto_pagado, fecha_pago')
-          .in('prestamo_id', loanIds);
-        
-        const payments = allPayments || [];
-        totalRecaudado = payments.reduce((acc, curr) => acc + Number(curr.monto_pagado), 0);
-        totalCobros = payments.length;
-
-        // Recaudo específico de HOY
-        recaudoHoy = payments
-          .filter(p => {
-            const fecha = new Date(p.fecha_pago);
-            return fecha >= hoyStart && fecha <= hoyEnd;
-          })
-          .reduce((acc, curr) => acc + Number(curr.monto_pagado), 0);
-      }
-
-      // 3. Obtener CUOTAS PENDIENTES para hoy (Ruta del día)
-      let cuotasPendientesHoy = 0;
-      if (loanIds.length > 0) {
-        const { count } = await supabase
-          .from('cuotas')
-          .select('*', { count: 'exact', head: true })
-          .in('prestamo_id', loanIds)
-          .eq('estado', 'pendiente')
-          .eq('fecha_vencimiento', new Date().toISOString().split('T')[0]);
-        
-        cuotasPendientesHoy = count || 0;
-      }
-
+      const { data: stats } = await fetchCollectorStats(user.id);
       setCollectorStats({
-        totalLoans: loans.length,
-        totalCartera,
-        totalRecaudado,
-        totalCobros,
-        recaudoHoy,
-        cuotasPendientesHoy,
-        moraCount,
-        email: user.email
+        ...stats,
+        email: user.email,
       });
     } catch (err) {
-      console.error(err);
+      console.error("Error al cargar estadísticas del cobrador:", err);
     } finally {
       setDetailLoading(false);
     }
@@ -301,7 +222,7 @@ const Users = () => {
   const handleOpenEdit = (user: UserProfile) => {
     setSelectedUser(user);
     setIsEditModalOpen(true);
-    setEditPassword('');
+    setEditPassword("");
     setEditError(null);
     setEditSuccess(false);
   };
@@ -309,24 +230,21 @@ const Users = () => {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser || !editPassword) return;
-    
+
     setEditLoading(true);
     setEditError(null);
 
-    // NOTA: Para cambiar la contraseña de OTRO usuario desde el frontend, 
-    // usualmente se requiere usar Supabase Admin Auth (con service_role key)
-    // lo cual no debe estar expuesto en el cliente por seguridad.
-    // Aquí usamos la función de actualización de Auth normal por si se configura 
-    // un flujo de admin o una función de base de datos/edge function externa.
-    
-    const { error } = await supabase.auth.admin.updateUserById(
-      selectedUser.id,
-      { password: editPassword }
-    );
+    const { error } = await cambiarPasswordUsuario({
+      userId: selectedUser.id,
+      newPassword: editPassword,
+    });
 
     if (error) {
-      // Si falla por permisos (común en el front), mostramos error informativo
-      setEditError("Error: Esta acción requiere permisos de administrador a nivel de servidor (Service Role) o una Edge Function segura.");
+      setEditError(
+        error instanceof Error
+          ? error.message
+          : "Error: No se pudo cambiar la contraseña. Requiere permisos de administrador.",
+      );
       setEditLoading(false);
     } else {
       setEditSuccess(true);
@@ -338,24 +256,25 @@ const Users = () => {
   };
 
   const handleDeleteUser = async (user: UserProfile) => {
-    if (user.rol === 'admin') {
-      alert('No se puede eliminar a un administrador.');
+    if (user.rol === "admin") {
+      alert("No se puede eliminar a un administrador.");
       return;
     }
 
-    if (window.confirm(`¿Estás seguro de que quieres eliminar al usuario ${user.email}?`)) {
+    if (
+      window.confirm(
+        `¿Estás seguro de que quieres eliminar al usuario ${user.email}?`,
+      )
+    ) {
       setLoading(true);
       try {
-        const { error } = await supabase
-          .from('perfiles')
-          .update({ deleted_at: new Date().toISOString() })
-          .eq('id', user.id);
-        
+        const { error } = await softDeletePerfil(user.id);
+
         if (error) throw error;
         fetchUsers();
       } catch (err) {
         console.error(err);
-        alert('Error al eliminar usuario');
+        alert("Error al eliminar usuario");
       } finally {
         setLoading(false);
       }
@@ -363,13 +282,16 @@ const Users = () => {
   };
 
   return (
-    <Layout title="Gestión de Usuarios" subtitle={`${totalCount} cuentas registradas`}>
+    <Layout
+      title="Gestión de Usuarios"
+      subtitle={`${totalCount} cuentas registradas`}
+    >
       <div className="users-actions">
         <div className="search-input">
           <Search size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar por email..." 
+          <input
+            type="text"
+            placeholder="Buscar por email..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -377,7 +299,10 @@ const Users = () => {
             }}
           />
         </div>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => setIsModalOpen(true)}
+        >
           <UserPlus size={18} />
           <span>Nuevo Usuario</span>
         </button>
@@ -391,14 +316,28 @@ const Users = () => {
                 <th>Usuario</th>
                 <th>Rol</th>
                 <th>Fecha Registro</th>
-                <th style={{ textAlign: 'right' }}>Acciones</th>
+                <th style={{ textAlign: "right" }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '40px' }}>Cargando usuarios...</td></tr>
+                <tr>
+                  <td
+                    colSpan={4}
+                    style={{ textAlign: "center", padding: "40px" }}
+                  >
+                    Cargando usuarios...
+                  </td>
+                </tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '40px' }}>No se encontraron usuarios</td></tr>
+                <tr>
+                  <td
+                    colSpan={4}
+                    style={{ textAlign: "center", padding: "40px" }}
+                  >
+                    No se encontraron usuarios
+                  </td>
+                </tr>
               ) : (
                 users.map((u: UserProfile) => (
                   <tr key={u.id}>
@@ -409,45 +348,82 @@ const Users = () => {
                         </div>
                         <div className="user-email-stack">
                           <span className="email-text">{u.email}</span>
-                          <span className="id-text">ID: {u.id.substring(0, 8)}...</span>
+                          <span className="id-text">
+                            ID: {u.id.substring(0, 8)}...
+                          </span>
                         </div>
                       </div>
                     </td>
                     <td>
                       <span className={`role-badge ${u.rol}`}>
-                        {u.rol === 'admin' ? <Shield size={12} /> : <User size={12} />}
-                        {u.rol === 'admin' ? 'Administrador' : 'Cobrador'}
+                        {u.rol === "admin" ? (
+                          <Shield size={12} />
+                        ) : (
+                          <User size={12} />
+                        )}
+                        {u.rol === "admin" ? "Administrador" : "Cobrador"}
                       </span>
                     </td>
                     <td>{new Date(u.created_at).toLocaleDateString()}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: "right" }}>
                       <div className="dropdown-container">
-                        <button 
-                          className="btn-icon" 
-                          onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)}
+                        <button
+                          className="btn-icon"
+                          onClick={() =>
+                            setActiveMenu(activeMenu === u.id ? null : u.id)
+                          }
                         >
                           <MoreVertical size={20} />
                         </button>
-                        
+
                         {activeMenu === u.id && (
                           <div className="dropdown-menu animate-fade">
-                            {u.rol === 'cobrador' && (
+                            {u.rol === "cobrador" && (
                               <>
-                                <button onClick={() => { handleViewDetails(u); setActiveMenu(null); }}>
+                                <button
+                                  onClick={() => {
+                                    handleViewDetails(u);
+                                    setActiveMenu(null);
+                                  }}
+                                >
                                   <Eye size={16} /> Ver Resumen
                                 </button>
-                                <button onClick={() => { openAssignModal(u); setActiveMenu(null); }}>
+                                <button
+                                  onClick={() => {
+                                    openAssignModal(u);
+                                    setActiveMenu(null);
+                                  }}
+                                >
                                   <ClipboardList size={16} /> Asignar Cobros
                                 </button>
                               </>
                             )}
-                            <button onClick={() => { handleOpenEdit(u); setActiveMenu(null); }}>
+                            <button
+                              onClick={() => {
+                                handleOpenEdit(u);
+                                setActiveMenu(null);
+                              }}
+                            >
                               <Pencil size={16} /> Cambiar Clave
                             </button>
-                            <button onClick={() => { handleUpdateRole(u.id, u.rol); setActiveMenu(null); }}>
-                              <Shield size={16} /> {u.rol === 'admin' ? 'Hacer Cobrador' : 'Hacer Admin'}
+                            <button
+                              onClick={() => {
+                                handleUpdateRole(u.id, u.rol);
+                                setActiveMenu(null);
+                              }}
+                            >
+                              <Shield size={16} />{" "}
+                              {u.rol === "admin"
+                                ? "Hacer Cobrador"
+                                : "Hacer Admin"}
                             </button>
-                            <button onClick={() => { handleDeleteUser(u); setActiveMenu(null); }} className="text-danger">
+                            <button
+                              onClick={() => {
+                                handleDeleteUser(u);
+                                setActiveMenu(null);
+                              }}
+                              className="text-danger"
+                            >
                               <Trash2 size={16} /> Eliminar
                             </button>
                           </div>
@@ -460,7 +436,7 @@ const Users = () => {
             </tbody>
           </table>
         </div>
-        <Pagination 
+        <Pagination
           currentPage={page}
           pageSize={pageSize}
           totalCount={totalCount}
@@ -478,14 +454,16 @@ const Users = () => {
             <Pencil size={20} className="text-primary" />
             <div>
               <h2 className="modal-title">Editar Usuario</h2>
-              <p className="text-muted" style={{ fontSize: '13px' }}>{selectedUser?.email}</p>
+              <p className="text-muted" style={{ fontSize: "13px" }}>
+                {selectedUser?.email}
+              </p>
             </div>
           </div>
         }
       >
         <form onSubmit={handleUpdatePassword} className="modal-form">
           {editSuccess ? (
-            <div className="success-state" style={{ padding: '20px' }}>
+            <div className="success-state" style={{ padding: "20px" }}>
               <CheckCircle2 size={32} color="var(--success)" />
               <h4>Contraseña Actualizada</h4>
             </div>
@@ -493,20 +471,30 @@ const Users = () => {
             <>
               <div className="form-group">
                 <label>ID de Usuario</label>
-                <input type="text" value={selectedUser?.id || ''} disabled className="form-control-disabled" />
+                <input
+                  type="text"
+                  value={selectedUser?.id || ""}
+                  disabled
+                  className="form-control-disabled"
+                />
               </div>
-              
+
               <div className="form-group">
                 <label>Correo Electrónico</label>
-                <input type="text" value={selectedUser?.email || ''} disabled className="form-control-disabled" />
+                <input
+                  type="text"
+                  value={selectedUser?.email || ""}
+                  disabled
+                  className="form-control-disabled"
+                />
               </div>
 
               <div className="form-group">
                 <label>Nueva Contraseña</label>
                 <div className="input-with-icon">
                   <Lock size={16} />
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     placeholder="Mínimo 6 caracteres"
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
@@ -514,7 +502,13 @@ const Users = () => {
                     minLength={6}
                   />
                 </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                <p
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    marginTop: "4px",
+                  }}
+                >
                   Asigna una nueva clave para este usuario.
                 </p>
               </div>
@@ -527,11 +521,19 @@ const Users = () => {
               )}
 
               <div className="modal-footer">
-                <button type="button" className="btn btn-neutral" onClick={() => setIsEditModalOpen(false)}>
+                <button
+                  type="button"
+                  className="btn btn-neutral"
+                  onClick={() => setIsEditModalOpen(false)}
+                >
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={editLoading}>
-                  {editLoading ? 'Guardando...' : 'Cambiar Contraseña'}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={editLoading}
+                >
+                  {editLoading ? "Guardando..." : "Cambiar Contraseña"}
                 </button>
               </div>
             </>
@@ -549,7 +551,9 @@ const Users = () => {
             <BarChart3 size={20} className="text-info" />
             <div>
               <h2 className="modal-title">Resumen de Cobrador</h2>
-              <p className="text-muted" style={{ fontSize: '13px' }}>{selectedUser?.email}</p>
+              <p className="text-muted" style={{ fontSize: "13px" }}>
+                {selectedUser?.email}
+              </p>
             </div>
           </div>
         }
@@ -568,26 +572,38 @@ const Users = () => {
                   <BarChart3 size={24} />
                 </div>
                 <div className="stat-content">
-                  <span className="stat-label">Total Recaudado (Histórico)</span>
-                  <h2 className="stat-value highlight">{formatCurrency(collectorStats.totalRecaudado)}</h2>
+                  <span className="stat-label">
+                    Total Recaudado (Histórico)
+                  </span>
+                  <h2 className="stat-value highlight">
+                    {formatCurrency(collectorStats.totalRecaudado)}
+                  </h2>
                 </div>
               </div>
 
               {/* Grid de Actividad Operativa */}
               <div className="details-grid">
                 <div className="detail-card">
-                  <div className="detail-icon briefcase"><Briefcase size={18} /></div>
+                  <div className="detail-icon briefcase">
+                    <Briefcase size={18} />
+                  </div>
                   <div className="detail-info">
                     <span className="detail-label">Préstamos Asignados</span>
-                    <span className="detail-value">{collectorStats.totalLoans}</span>
+                    <span className="detail-value">
+                      {collectorStats.totalLoans}
+                    </span>
                   </div>
                 </div>
 
                 <div className="detail-card">
-                  <div className="detail-icon check"><CheckCircle2 size={18} /></div>
+                  <div className="detail-icon check">
+                    <CheckCircle2 size={18} />
+                  </div>
                   <div className="detail-info">
                     <span className="detail-label">Cobros Realizados</span>
-                    <span className="detail-value">{collectorStats.totalCobros}</span>
+                    <span className="detail-value">
+                      {collectorStats.totalCobros}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -599,13 +615,17 @@ const Users = () => {
                   <div className="detail-card today-highlight">
                     <div className="detail-info">
                       <span className="detail-label">Recaudado Hoy</span>
-                      <span className="detail-value text-success">{formatCurrency(collectorStats.recaudoHoy)}</span>
+                      <span className="detail-value text-success">
+                        {formatCurrency(collectorStats.recaudoHoy)}
+                      </span>
                     </div>
                   </div>
                   <div className="detail-card">
                     <div className="detail-info">
                       <span className="detail-label">Pendientes de Cobro</span>
-                      <span className="detail-value text-warning">{collectorStats.cuotasPendientesHoy}</span>
+                      <span className="detail-value text-warning">
+                        {collectorStats.cuotasPendientesHoy}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -614,25 +634,46 @@ const Users = () => {
               {/* Riesgo de Cartera */}
               <div className="risk-summary mt-2">
                 <div className="detail-card danger-zone w-full">
-                  <div className="detail-icon alert"><AlertCircle size={18} /></div>
+                  <div className="detail-icon alert">
+                    <AlertCircle size={18} />
+                  </div>
                   <div className="detail-info">
                     <span className="detail-label">Cartera en Mora</span>
-                    <span className="detail-value text-danger">{collectorStats.moraCount} clientes</span>
+                    <span className="detail-value text-danger">
+                      {collectorStats.moraCount} clientes
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 'auto', textAlign: 'right' }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      marginLeft: "auto",
+                      textAlign: "right",
+                    }}
+                  >
                     <span className="detail-label">Saldo Pendiente</span>
-                    <span className="detail-value">{formatCurrency(collectorStats.totalCartera)}</span>
+                    <span className="detail-value">
+                      {formatCurrency(collectorStats.totalCartera)}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="empty-state">No se pudieron cargar los datos del cobrador</div>
+            <div className="empty-state">
+              No se pudieron cargar los datos del cobrador
+            </div>
           )}
         </div>
 
-        <div className="modal-footer" style={{ borderTop: 'none', paddingBottom: '10px' }}>
-          <button className="btn btn-neutral w-full" onClick={() => setIsDetailModalOpen(false)}>
+        <div
+          className="modal-footer"
+          style={{ borderTop: "none", paddingBottom: "10px" }}
+        >
+          <button
+            className="btn btn-neutral w-full"
+            onClick={() => setIsDetailModalOpen(false)}
+          >
             Cerrar
           </button>
         </div>
@@ -648,16 +689,18 @@ const Users = () => {
             <Briefcase size={20} className="text-primary" />
             <div>
               <h2 className="modal-title">Asignar Cobros</h2>
-              <p className="text-muted" style={{ fontSize: '13px' }}>Asignando a: {selectedUser?.email}</p>
+              <p className="text-muted" style={{ fontSize: "13px" }}>
+                Asignando a: {selectedUser?.email}
+              </p>
             </div>
           </div>
         }
       >
         <div className="search-input mt-4 mb-4">
           <Search size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar cliente o préstamo..." 
+          <input
+            type="text"
+            placeholder="Buscar cliente o préstamo..."
             value={assignSearch}
             onChange={(e) => setAssignSearch(e.target.value)}
           />
@@ -667,32 +710,48 @@ const Users = () => {
           {assignLoading ? (
             <div className="loading-state">Cargando préstamos...</div>
           ) : availableLoans.length === 0 ? (
-            <div className="empty-state">No hay préstamos activos para asignar</div>
+            <div className="empty-state">
+              No hay préstamos activos para asignar
+            </div>
           ) : (
             <div className="loans-scroll-area">
               {availableLoans
-                .filter(l => 
-                  l.clientes.nombre.toLowerCase().includes(assignSearch.toLowerCase()) ||
-                  l.clientes.identificacion.includes(assignSearch)
+                .filter(
+                  (l) =>
+                    l.clientes.nombre
+                      .toLowerCase()
+                      .includes(assignSearch.toLowerCase()) ||
+                    l.clientes.identificacion.includes(assignSearch),
                 )
-                .map(loan => {
-                  const isAssignedToCurrent = loan.cobrador_id === selectedUser?.id;
-                  const isAssignedToOther = loan.cobrador_id && loan.cobrador_id !== selectedUser?.id;
-                  
+                .map((loan) => {
+                  const isAssignedToCurrent =
+                    loan.cobrador_id === selectedUser?.id;
+                  const isAssignedToOther =
+                    loan.cobrador_id && loan.cobrador_id !== selectedUser?.id;
+
                   return (
-                    <div key={loan.id} className={`loan-assign-item ${isAssignedToCurrent ? 'selected' : ''}`}>
+                    <div
+                      key={loan.id}
+                      className={`loan-assign-item ${isAssignedToCurrent ? "selected" : ""}`}
+                    >
                       <div className="loan-assign-info">
                         <strong>{loan.clientes.nombre}</strong>
-                        <span>Saldo: {formatCurrency(loan.saldo_pendiente)}</span>
+                        <span>
+                          Saldo: {formatCurrency(loan.saldo_pendiente)}
+                        </span>
                         {isAssignedToOther && (
-                          <span className="other-assign-badge">Asignado a otro</span>
+                          <span className="other-assign-badge">
+                            Asignado a otro
+                          </span>
                         )}
                       </div>
-                      <button 
-                        className={`btn btn-sm ${isAssignedToCurrent ? 'btn-danger' : 'btn-primary'}`}
-                        onClick={() => toggleLoanAssignment(loan.id, isAssignedToCurrent)}
+                      <button
+                        className={`btn btn-sm ${isAssignedToCurrent ? "btn-danger" : "btn-primary"}`}
+                        onClick={() =>
+                          toggleLoanAssignment(loan.id, isAssignedToCurrent)
+                        }
                       >
-                        {isAssignedToCurrent ? 'Quitar' : 'Asignar'}
+                        {isAssignedToCurrent ? "Quitar" : "Asignar"}
                       </button>
                     </div>
                   );
@@ -702,7 +761,10 @@ const Users = () => {
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-primary w-full" onClick={() => setIsAssignModalOpen(false)}>
+          <button
+            className="btn btn-primary w-full"
+            onClick={() => setIsAssignModalOpen(false)}
+          >
             Finalizar
           </button>
         </div>
@@ -717,8 +779,15 @@ const Users = () => {
             <CheckCircle2 size={48} color="var(--success)" />
             <h3>¡Usuario Registrado!</h3>
             <p>El usuario ha sido creado correctamente.</p>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
-              Nota: Si la confirmación de correo está activa, el usuario deberá revisar su bandeja de entrada para poder iniciar sesión.
+            <p
+              style={{
+                fontSize: "13px",
+                color: "var(--text-muted)",
+                marginTop: "8px",
+              }}
+            >
+              Nota: Si la confirmación de correo está activa, el usuario deberá
+              revisar su bandeja de entrada para poder iniciar sesión.
             </p>
           </div>
         ) : (
@@ -729,13 +798,13 @@ const Users = () => {
                 <span>{formError}</span>
               </div>
             )}
-            
+
             <div className="form-group">
               <label>Correo Electrónico</label>
               <div className="input-with-icon">
                 <Mail size={16} />
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   placeholder="correo@ejemplo.com"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
@@ -748,8 +817,8 @@ const Users = () => {
               <label>Contraseña Temporal</label>
               <div className="input-with-icon">
                 <Key size={16} />
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   placeholder="Mínimo 6 caracteres"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -761,27 +830,40 @@ const Users = () => {
 
             <div className="form-group">
               <label>Rol Inicial</label>
-              <select 
+              <select
                 className="form-select"
                 value={newRol}
-                onChange={(e) => setNewRol(e.target.value as 'admin' | 'cobrador')}
+                onChange={(e) =>
+                  setNewRol(e.target.value as "admin" | "cobrador")
+                }
               >
                 <option value="cobrador">Cobrador (Acceso limitado)</option>
                 <option value="admin">Administrador (Acceso total)</option>
               </select>
             </div>
 
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button 
-                type="button" 
-                className="btn btn-neutral" 
+            <div
+              className="modal-footer"
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-neutral"
                 onClick={() => setIsModalOpen(false)}
                 disabled={formLoading}
               >
                 Cancelar
               </button>
-              <button type="submit" className="btn btn-primary" disabled={formLoading}>
-                {formLoading ? 'Creando...' : 'Crear Usuario'}
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={formLoading}
+              >
+                {formLoading ? "Creando..." : "Crear Usuario"}
               </button>
             </div>
           </form>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { fetchConfigByClave } from '../services';
 
 const DEFAULT_BUSINESS_NAME = 'PrestaYa';
 const CACHE_KEY = 'business_name';
@@ -13,15 +13,11 @@ export const useBusinessName = () => {
   useEffect(() => {
     const fetchBusinessName = async () => {
       try {
-        const { data, error } = await supabase
-          .from('configuracion')
-          .select('valor')
-          .eq('clave', 'nombre_empresa')
-          .single();
+        const { data, error } = await fetchConfigByClave('nombre_empresa');
 
         if (error) return;
 
-        const name = data?.valor?.trim();
+        const name = data?.trim();
         if (!name) return;
 
         setBusinessName(name);
@@ -36,4 +32,3 @@ export const useBusinessName = () => {
 
   return businessName;
 };
-

@@ -29,3 +29,11 @@ dist-ssr
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Supabase CLI
+supabase/.temp/
+supabase/.branches/
+
+# Testing & Coverage
+coverage/
+

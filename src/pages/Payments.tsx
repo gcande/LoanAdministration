@@ -1,44 +1,42 @@
 import { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
-import { useParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { formatCurrency } from '../utils/finance';
-import { Check, MessageSquare, Share2 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { useParams } from "react-router-dom";
+import { formatCurrency } from "../utils/finance";
+import { Check, MessageSquare, Share2 } from "lucide-react";
+import jsPDF from "jspdf";
+import {
+  actualizarSaldoPrestamo,
+  fetchConfiguracion,
+  fetchCuotasByPrestamo,
+  fetchPrestamoConCliente,
+  marcarCuotaPagada,
+  registrarPago,
+} from "../services";
+import type { Cuota } from "../services/types";
 
 const Payments = () => {
   const { id } = useParams();
   const [loan, setLoan] = useState<any>(null);
-  const [cuotas, setCuotas] = useState<any[]>([]);
+  const [cuotas, setCuotas] = useState<Cuota[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [activeCuota, setActiveCuota] = useState<any>(null);
   const [montoRecibido, setMontoRecibido] = useState(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
-  const [config, setConfig] = useState<any>(null);
+  const [config, setConfig] = useState<Record<string, string> | null>(null);
 
   const fetchLoanDetails = useCallback(async () => {
-    // Buscar configuración
-    const { data: conf } = await supabase.from('configuracion').select('*');
-    const configObj = conf?.reduce((acc: any, curr: any) => ({ ...acc, [curr.clave]: curr.valor }), {});
+    const [configObj, { data: l }, c] = await Promise.all([
+      fetchConfiguracion(),
+      fetchPrestamoConCliente(id!),
+      fetchCuotasByPrestamo(id!),
+    ]);
+
     setConfig(configObj);
-
-    const { data: l } = await supabase
-      .from('prestamos')
-      .select('*, clientes(nombre, identificacion, telefono)')
-      .eq('id', id)
-      .single();
-    
-    const { data: c } = await supabase
-      .from('cuotas')
-      .select('*')
-      .eq('prestamo_id', id)
-      .order('numero_cuota', { ascending: true });
-
     setLoan(l);
-    setCuotas(c || []);
+    setCuotas(c);
     setLoading(false);
   }, [id]);
 
@@ -46,16 +44,16 @@ const Payments = () => {
     fetchLoanDetails();
   }, [fetchLoanDetails]);
 
-  const calculateLateFee = (cuota: any) => {
+  const calculateLateFee = (cuota: Cuota) => {
     if (!config) return 0;
-    
+
     const hoy = new Date();
     const vencimiento = new Date(cuota.fecha_vencimiento);
     const diasGracia = Number(config.dias_gracia || 0);
     const tasaDiaria = Number(config.tasa_mora_diaria || 0) / 100;
 
-    hoy.setHours(0,0,0,0);
-    vencimiento.setHours(0,0,0,0);
+    hoy.setHours(0, 0, 0, 0);
+    vencimiento.setHours(0, 0, 0, 0);
 
     const diffTime = hoy.getTime() - vencimiento.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -63,11 +61,11 @@ const Payments = () => {
     if (diffDays > diasGracia) {
       return Number(cuota.monto_cuota) * tasaDiaria * diffDays;
     }
-    
+
     return 0;
   };
 
-  const handleOpenPayment = (cuota: any) => {
+  const handleOpenPayment = (cuota: Cuota) => {
     const calculatedFee = calculateLateFee(cuota);
     setActiveCuota({ ...cuota, current_late_fee: calculatedFee });
     setMontoRecibido(Number(cuota.monto_cuota) + calculatedFee);
@@ -77,37 +75,34 @@ const Payments = () => {
   const processPayment = async () => {
     try {
       const lateFeeToApply = activeCuota.current_late_fee || 0;
-      
-      // 1. Registrar Pago
-      const { error: paymentError } = await supabase.from('pagos').insert([{
-        prestamo_id: id,
-        cuota_id: activeCuota.id,
-        monto_pagado: montoRecibido,
-        metodo_pago: 'Efectivo',
-        aplicado_a_mora: lateFeeToApply,
-        aplicado_a_interes: activeCuota.monto_interes,
-        aplicado_a_capital: montoRecibido - lateFeeToApply - activeCuota.monto_interes
-      }]);
+      const aplicadoInteres = Number(activeCuota.monto_interes);
+      const aplicadoCapital = montoRecibido - lateFeeToApply - aplicadoInteres;
 
+      // 1. Registrar Pago
+      const { error: paymentError } = await registrarPago({
+        prestamoId: id!,
+        cuotaId: activeCuota.id,
+        montoRecibido,
+        aplicadoMora: lateFeeToApply,
+        aplicadoInteres,
+        aplicadoCapital,
+      });
       if (paymentError) throw paymentError;
 
       // 2. Actualizar Cuota
-      const { error: cuotaError } = await supabase.from('cuotas').update({
-        estado: 'pagado',
-        fecha_pago: new Date().toISOString(),
-        mora_acumulada: lateFeeToApply
-      }).eq('id', activeCuota.id);
-
+      const { error: cuotaError } = await marcarCuotaPagada(
+        activeCuota.id,
+        lateFeeToApply,
+      );
       if (cuotaError) throw cuotaError;
 
       // 3. Actualizar Saldo Préstamo
-      const capitalPagado = montoRecibido - lateFeeToApply - activeCuota.monto_interes;
-      const nuevoSaldo = loan.saldo_pendiente - capitalPagado;
-      
-      await supabase.from('prestamos').update({
-        saldo_pendiente: Math.max(0, nuevoSaldo),
-        estado: nuevoSaldo <= 0 ? 'pagado' : 'activo'
-      }).eq('id', id);
+      const nuevoSaldo = loan.saldo_pendiente - aplicadoCapital;
+      const { error: prestamoError } = await actualizarSaldoPrestamo(
+        id!,
+        nuevoSaldo,
+      );
+      if (prestamoError) throw prestamoError;
 
       setReceiptData({
         cliente: loan.clientes.nombre,
@@ -115,8 +110,8 @@ const Payments = () => {
         cuotaNr: activeCuota.numero_cuota,
         monto: montoRecibido,
         mora: lateFeeToApply,
-        fecha: new Date().toLocaleString('es-CO'),
-        empresa: config.nombre_empresa || 'PrestaYa'
+        fecha: new Date().toLocaleString("es-CO"),
+        empresa: config?.nombre_empresa || "PrestaYa",
       });
 
       setShowModal(false);
@@ -124,7 +119,7 @@ const Payments = () => {
       fetchLoanDetails();
     } catch (error) {
       console.error(error);
-      alert('Error al registrar el pago');
+      alert("Error al registrar el pago");
     }
   };
 
@@ -132,57 +127,78 @@ const Payments = () => {
     if (!receiptData) return;
 
     const doc = new jsPDF({
-      unit: 'mm',
-      format: [80, 150]
+      unit: "mm",
+      format: [80, 150],
     });
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text(receiptData.empresa.toUpperCase(), 40, 15, { align: 'center' });
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('NIT: 900.123.456-1', 40, 20, { align: 'center' });
-    doc.text('------------------------------------------', 40, 25, { align: 'center' });
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('COMPROBANTE DE PAGO', 40, 32, { align: 'center' });
-    doc.text(`Recibo: #${Math.floor(Math.random() * 9000) + 1000}`, 40, 37, { align: 'center' });
-    doc.text('------------------------------------------', 40, 42, { align: 'center' });
+    doc.text(receiptData.empresa.toUpperCase(), 40, 15, { align: "center" });
 
-    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text("NIT: 900.123.456-1", 40, 20, { align: "center" });
+    doc.text("------------------------------------------", 40, 25, {
+      align: "center",
+    });
+
+    doc.setFont("helvetica", "bold");
+    doc.text("COMPROBANTE DE PAGO", 40, 32, { align: "center" });
+    doc.text(`Recibo: #${Math.floor(Math.random() * 9000) + 1000}`, 40, 37, {
+      align: "center",
+    });
+    doc.text("------------------------------------------", 40, 42, {
+      align: "center",
+    });
+
+    doc.setFont("helvetica", "normal");
     doc.text(`Fecha: ${receiptData.fecha}`, 10, 50);
     doc.text(`Cliente: ${receiptData.cliente}`, 10, 55);
     doc.text(`Identificación: ${loan.clientes.identificacion}`, 10, 60);
-    
-    doc.text('------------------------------------------', 40, 72, { align: 'center' });
-    doc.setFont('helvetica', 'bold');
-    doc.text('DETALLE DEL PAGO', 10, 80);
-    doc.setFont('helvetica', 'normal');
+
+    doc.text("------------------------------------------", 40, 72, {
+      align: "center",
+    });
+    doc.setFont("helvetica", "bold");
+    doc.text("DETALLE DEL PAGO", 10, 80);
+    doc.setFont("helvetica", "normal");
     doc.text(`Cuota N°:`, 10, 87);
-    doc.text(`${receiptData.cuotaNr}`, 70, 87, { align: 'right' });
-    
+    doc.text(`${receiptData.cuotaNr}`, 70, 87, { align: "right" });
+
     doc.text(`Abono a Capital:`, 10, 92);
-    doc.text(`${formatCurrency(receiptData.monto - (activeCuota.monto_interes || 0) - receiptData.mora)}`, 70, 92, { align: 'right' });
-    
+    doc.text(
+      `${formatCurrency(receiptData.monto - (activeCuota.monto_interes || 0) - receiptData.mora)}`,
+      70,
+      92,
+      { align: "right" },
+    );
+
     doc.text(`Abono a Interés:`, 10, 97);
-    doc.text(`${formatCurrency(activeCuota.monto_interes || 0)}`, 70, 97, { align: 'right' });
-    
+    doc.text(`${formatCurrency(activeCuota.monto_interes || 0)}`, 70, 97, {
+      align: "right",
+    });
+
     if (receiptData.mora > 0) {
       doc.text(`Mora / Recargos:`, 10, 102);
-      doc.text(`${formatCurrency(receiptData.mora)}`, 70, 102, { align: 'right' });
+      doc.text(`${formatCurrency(receiptData.mora)}`, 70, 102, {
+        align: "right",
+      });
     }
 
-    doc.text('------------------------------------------', 40, 110, { align: 'center' });
+    doc.text("------------------------------------------", 40, 110, {
+      align: "center",
+    });
     doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL PAGADO:', 10, 118);
-    doc.text(`${formatCurrency(receiptData.monto)}`, 70, 118, { align: 'right' });
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL PAGADO:", 10, 118);
+    doc.text(`${formatCurrency(receiptData.monto)}`, 70, 118, {
+      align: "right",
+    });
 
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.text('¡Gracias por su puntualidad!', 40, 140, { align: 'center' });
-    doc.text('Generado por PrestaYa Digital', 40, 144, { align: 'center' });
+    doc.setFont("helvetica", "italic");
+    doc.text("¡Gracias por su puntualidad!", 40, 140, { align: "center" });
+    doc.text("Generado por PrestaYa Digital", 40, 144, { align: "center" });
 
     return doc;
   };
@@ -191,22 +207,28 @@ const Payments = () => {
     const doc = generatePDF();
     if (!doc) return;
 
-    const pdfBlob = doc.output('blob');
-    const file = new File([pdfBlob], `Recibo_${receiptData.cliente}.pdf`, { type: 'application/pdf' });
+    const pdfBlob = doc.output("blob");
+    const file = new File([pdfBlob], `Recibo_${receiptData.cliente}.pdf`, {
+      type: "application/pdf",
+    });
 
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [file] })
+    ) {
       try {
         await navigator.share({
           files: [file],
-          title: 'Recibo de Pago',
-          text: `Recibo de pago - ${receiptData.empresa}`
+          title: "Recibo de Pago",
+          text: `Recibo de pago - ${receiptData.empresa}`,
         });
-      } catch (error) {
+      } catch {
         doc.save(`Recibo_${receiptData.cliente}.pdf`);
       }
     } else {
       doc.save(`Recibo_${receiptData.cliente}.pdf`);
-      alert('PDF descargado. Ahora puedes compartirlo.');
+      alert("PDF descargado. Ahora puedes compartirlo.");
     }
   };
 
@@ -232,21 +254,33 @@ const Payments = () => {
       </div>
 
       <div className="cuotas-list">
-        {cuotas.map(cuota => {
-          const moraActual = cuota.estado !== 'pagado' ? calculateLateFee(cuota) : (cuota.mora_acumulada || 0);
+        {cuotas.map((cuota) => {
+          const moraActual =
+            cuota.estado !== "pagado"
+              ? calculateLateFee(cuota)
+              : cuota.mora_acumulada || 0;
           return (
             <div key={cuota.id} className={`cuota-item ${cuota.estado}`}>
               <div className="cuota-nr">{cuota.numero_cuota}</div>
               <div className="cuota-info">
                 <strong>{formatCurrency(cuota.monto_cuota)}</strong>
                 <span>Vence: {cuota.fecha_vencimiento}</span>
-                {moraActual > 0 && <span className="mora-tag">Mora: {formatCurrency(moraActual)}</span>}
+                {moraActual > 0 && (
+                  <span className="mora-tag">
+                    Mora: {formatCurrency(moraActual)}
+                  </span>
+                )}
               </div>
               <div className="cuota-action">
-                {cuota.estado === 'pagado' ? (
-                  <div className="paid-icon"><Check size={20} /></div>
+                {cuota.estado === "pagado" ? (
+                  <div className="paid-icon">
+                    <Check size={20} />
+                  </div>
                 ) : (
-                  <button className="btn btn-primary btn-sm" onClick={() => handleOpenPayment(cuota)}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleOpenPayment(cuota)}
+                  >
                     Pagar
                   </button>
                 )}
@@ -262,7 +296,7 @@ const Payments = () => {
         title="Registrar Pago"
       >
         <p className="text-secondary">Cuota #{activeCuota?.numero_cuota}</p>
-        
+
         <div className="payment-details">
           <div className="detail-row">
             <span>Valor Cuota:</span>
@@ -270,27 +304,41 @@ const Payments = () => {
           </div>
           <div className="detail-row">
             <span>Interés por Mora:</span>
-            <span className="text-danger">{formatCurrency(activeCuota?.current_late_fee || 0)}</span>
+            <span className="text-danger">
+              {formatCurrency(activeCuota?.current_late_fee || 0)}
+            </span>
           </div>
           <hr />
           <div className="detail-row total">
             <span>Total Sugerido:</span>
-            <span>{formatCurrency(Number(activeCuota?.monto_cuota || 0) + (activeCuota?.current_late_fee || 0))}</span>
+            <span>
+              {formatCurrency(
+                Number(activeCuota?.monto_cuota || 0) +
+                  (activeCuota?.current_late_fee || 0),
+              )}
+            </span>
           </div>
         </div>
 
         <div className="form-group mt-4">
           <label>Monto a Recibir</label>
-          <input 
-            type="number" 
-            value={montoRecibido} 
-            onChange={e => setMontoRecibido(Number(e.target.value))}
+          <input
+            type="number"
+            value={montoRecibido}
+            onChange={(e) => setMontoRecibido(Number(e.target.value))}
           />
         </div>
 
         <div className="modal-actions">
-          <button className="btn btn-neutral" onClick={() => setShowModal(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={processPayment}>Confirmar Pago</button>
+          <button
+            className="btn btn-neutral"
+            onClick={() => setShowModal(false)}
+          >
+            Cancelar
+          </button>
+          <button className="btn btn-primary" onClick={processPayment}>
+            Confirmar Pago
+          </button>
         </div>
       </Modal>
 
@@ -336,31 +384,33 @@ const Payments = () => {
             Descargar y Compartir PDF
           </button>
 
-          <button 
+          <button
             className="btn btn-whatsapp w-full"
             onClick={() => {
               if (!receiptData) return;
-              const message = `*RECIBO DE PAGO - ${receiptData.empresa}*%0A%0A` +
+              const message =
+                `*RECIBO DE PAGO - ${receiptData.empresa}*%0A%0A` +
                 `Hola *${receiptData.cliente}*, confirmamos tu pago:%0A%0A` +
                 `✅ *Concepto:* Cuota #${receiptData.cuotaNr}%0A` +
                 `✅ *Monto:* ${formatCurrency(receiptData.monto)}%0A` +
                 `✅ *Fecha:* ${receiptData.fecha}%0A%0A` +
                 `¡Gracias por tu puntualidad!`;
-              const phone = receiptData.telefono?.replace(/\D/g, '') || '';
-              window.open(`https://wa.me/57${phone}?text=${message}`, '_blank');
+              const phone = receiptData.telefono?.replace(/\D/g, "") || "";
+              window.open(`https://wa.me/57${phone}?text=${message}`, "_blank");
             }}
           >
             <MessageSquare size={20} />
             Enviar Mensaje WhatsApp
           </button>
-          
-          <button className="btn btn-neutral w-full" onClick={() => setShowReceipt(false)}>
+
+          <button
+            className="btn btn-neutral w-full"
+            onClick={() => setShowReceipt(false)}
+          >
             Cerrar
           </button>
         </div>
       </Modal>
-
-
     </Layout>
   );
 };

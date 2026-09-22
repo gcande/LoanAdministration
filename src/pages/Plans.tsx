@@ -1,35 +1,33 @@
 import { useEffect, useState, useCallback } from 'react';
 import Layout from '../components/Layout';
-import Modal from '../components/Modal';
-import { supabase } from '../lib/supabase';
-import { Plus, Trash2, Edit, Check } from 'lucide-react';
-import { formatCurrency } from '../utils/finance';
+import Modal from "../components/Modal";
+import { Plus, Trash2, Edit, Check } from "lucide-react";
+import { formatCurrency } from "../utils/finance";
+import { createPlan, deletePlan, fetchPlanes, updatePlan } from "../services";
+import type { FrecuenciaPago } from "../services/types";
 
 const Plans = () => {
   const [planes, setPlanes] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    nombre_plan: '',
+    nombre_plan: "",
     monto_minimo: 100000,
     monto_maximo: 5000000,
     tasa_interes: 10,
     num_cuotas: 12,
-    frecuencia_pago: 'mensual',
-    activo: true
+    frecuencia_pago: "mensual" as FrecuenciaPago,
+    activo: true,
   });
 
-  const fetchPlanes = useCallback(async () => {
-    const { data } = await supabase
-      .from('planes_prestamo')
-      .select('*')
-      .order('created_at', { ascending: false });
-    setPlanes(data || []);
+  const fetchPlanesList = useCallback(async () => {
+    const data = await fetchPlanes();
+    setPlanes(data);
   }, []);
 
   useEffect(() => {
-    fetchPlanes();
-  }, [fetchPlanes]);
+    fetchPlanesList();
+  }, [fetchPlanesList]);
 
   const handleOpenModal = (plan?: any) => {
     if (plan) {
@@ -41,18 +39,18 @@ const Plans = () => {
         tasa_interes: plan.tasa_interes,
         num_cuotas: plan.num_cuotas,
         frecuencia_pago: plan.frecuencia_pago,
-        activo: plan.activo
+        activo: plan.activo,
       });
     } else {
       setEditingId(null);
       setFormData({
-        nombre_plan: '',
+        nombre_plan: "",
         monto_minimo: 100000,
         monto_maximo: 5000000,
         tasa_interes: 10,
         num_cuotas: 12,
-        frecuencia_pago: 'mensual',
-        activo: true
+        frecuencia_pago: "mensual",
+        activo: true,
       });
     }
     setShowModal(true);
@@ -62,37 +60,33 @@ const Plans = () => {
     e.preventDefault();
     try {
       if (editingId) {
-        const { error } = await supabase
-          .from('planes_prestamo')
-          .update(formData)
-          .eq('id', editingId);
+        const { error } = await updatePlan(editingId, formData);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('planes_prestamo')
-          .insert([formData]);
+        const { error } = await createPlan(formData);
         if (error) throw error;
       }
-      
+
       setShowModal(false);
-      fetchPlanes();
+      fetchPlanesList();
     } catch (error) {
       console.error(error);
-      alert('Error al guardar el plan');
+      alert("Error al guardar el plan");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de eliminar este plan? No se podrá eliminar si tiene préstamos asociados.')) {
-      const { error } = await supabase
-        .from('planes_prestamo')
-        .delete()
-        .eq('id', id);
-      
+    if (
+      confirm(
+        "¿Estás seguro de eliminar este plan? No se podrá eliminar si tiene préstamos asociados.",
+      )
+    ) {
+      const { error } = await deletePlan(id);
+
       if (error) {
-        alert('No se pudo eliminar el plan. Es posible que ya esté en uso.');
+        alert("No se pudo eliminar el plan. Es posible que ya esté en uso.");
       } else {
-        fetchPlanes();
+        fetchPlanesList();
       }
     }
   };
@@ -100,7 +94,9 @@ const Plans = () => {
   return (
     <Layout title="Planes de Préstamo">
       <div className="actions-header animate-fade">
-        <p className="text-secondary">Configura tus productos financieros y tasas.</p>
+        <p className="text-secondary">
+          Configura tus productos financieros y tasas.
+        </p>
         <button className="btn btn-primary" onClick={() => handleOpenModal()}>
           <Plus size={20} />
           Nuevo Plan
@@ -108,24 +104,35 @@ const Plans = () => {
       </div>
 
       <div className="plans-grid mt-6">
-        {planes.map(plan => (
+        {planes.map((plan) => (
           <div key={plan.id} className="card plan-card animate-fade">
             <div className="plan-header">
               <div>
                 <h4>{plan.nombre_plan}</h4>
                 <div className="plan-status">
-                   {plan.activo ? 
-                    <span className="badge badge-success">Activo</span> : 
+                  {plan.activo ? (
+                    <span className="badge badge-success">Activo</span>
+                  ) : (
                     <span className="badge badge-danger">Inactivo</span>
-                   }
+                  )}
                 </div>
               </div>
               <div className="plan-actions">
-                <button className="btn-icon" onClick={() => handleOpenModal(plan)}><Edit size={18} /></button>
-                <button className="btn-icon text-danger" onClick={() => handleDelete(plan.id)}><Trash2 size={18} /></button>
+                <button
+                  className="btn-icon"
+                  onClick={() => handleOpenModal(plan)}
+                >
+                  <Edit size={18} />
+                </button>
+                <button
+                  className="btn-icon text-danger"
+                  onClick={() => handleDelete(plan.id)}
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
             </div>
-            
+
             <div className="plan-content">
               <div className="info-box">
                 <div className="info-item">
@@ -141,10 +148,13 @@ const Plans = () => {
                   <strong>{plan.num_cuotas}</strong>
                 </div>
               </div>
-              
+
               <div className="rango-box">
                 <span>Rango Permitido</span>
-                <p>{formatCurrency(plan.monto_minimo)} - {formatCurrency(plan.monto_maximo)}</p>
+                <p>
+                  {formatCurrency(plan.monto_minimo)} -{" "}
+                  {formatCurrency(plan.monto_maximo)}
+                </p>
               </div>
             </div>
           </div>
@@ -154,48 +164,65 @@ const Plans = () => {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title={editingId ? 'Editar Plan' : 'Crear Nuevo Plan'}
+        title={editingId ? "Editar Plan" : "Crear Nuevo Plan"}
       >
         <form onSubmit={handleSubmit} className="mt-4">
           <div className="form-group">
             <label>Nombre del Producto</label>
-            <input 
-              required 
-              type="text" 
+            <input
+              required
+              type="text"
               value={formData.nombre_plan}
               placeholder="Ej: Plan Microcrédito Express"
-              onChange={e => setFormData({...formData, nombre_plan: e.target.value})} 
+              onChange={(e) =>
+                setFormData({ ...formData, nombre_plan: e.target.value })
+              }
             />
           </div>
 
           <div className="grid-2">
             <div className="form-group">
               <label>Tasa de Interés (%)</label>
-              <input 
+              <input
                 required
-                type="number" 
+                type="number"
                 step="0.01"
                 value={formData.tasa_interes}
-                onChange={e => setFormData({...formData, tasa_interes: Number(e.target.value)})} 
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tasa_interes: Number(e.target.value),
+                  })
+                }
               />
             </div>
             <div className="form-group">
               <label>Número de Cuotas</label>
-              <input 
+              <input
                 required
-                type="number" 
+                type="number"
                 value={formData.num_cuotas}
-                onChange={e => setFormData({...formData, num_cuotas: Number(e.target.value)})} 
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    num_cuotas: Number(e.target.value),
+                  })
+                }
               />
             </div>
           </div>
 
           <div className="form-group">
             <label>Frecuencia de Pagos</label>
-            <select 
+            <select
               className="form-select"
               value={formData.frecuencia_pago}
-              onChange={e => setFormData({...formData, frecuencia_pago: e.target.value})}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  frecuencia_pago: e.target.value as FrecuenciaPago,
+                })
+              }
             >
               <option value="semanal">Semanal</option>
               <option value="quincenal">Quincenal</option>
@@ -206,46 +233,64 @@ const Plans = () => {
           <div className="grid-2">
             <div className="form-group">
               <label>Monto Mínimo</label>
-              <input 
+              <input
                 required
-                type="number" 
+                type="number"
                 value={formData.monto_minimo}
-                onChange={e => setFormData({...formData, monto_minimo: Number(e.target.value)})} 
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    monto_minimo: Number(e.target.value),
+                  })
+                }
               />
             </div>
             <div className="form-group">
               <label>Monto Máximo</label>
-              <input 
+              <input
                 required
-                type="number" 
+                type="number"
                 value={formData.monto_maximo}
-                onChange={e => setFormData({...formData, monto_maximo: Number(e.target.value)})} 
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    monto_maximo: Number(e.target.value),
+                  })
+                }
               />
             </div>
           </div>
 
           <div className="form-group flex items-center gap-2 mt-4">
-            <input 
-              type="checkbox" 
-              checked={formData.activo} 
+            <input
+              type="checkbox"
+              checked={formData.activo}
               id="activo"
-              style={{ width: 'auto' }}
-              onChange={e => setFormData({...formData, activo: e.target.checked})} 
+              style={{ width: "auto" }}
+              onChange={(e) =>
+                setFormData({ ...formData, activo: e.target.checked })
+              }
             />
-            <label htmlFor="activo" className="mb-0">Plan Activo (disponible para nuevos préstamos)</label>
+            <label htmlFor="activo" className="mb-0">
+              Plan Activo (disponible para nuevos préstamos)
+            </label>
           </div>
 
           <div className="modal-actions mt-6">
-            <button type="button" className="btn btn-neutral" onClick={() => setShowModal(false)}>Cancelar</button>
+            <button
+              type="button"
+              className="btn btn-neutral"
+              onClick={() => setShowModal(false)}
+            >
+              Cancelar
+            </button>
             <button type="submit" className="btn btn-primary">
               <Check size={18} />
-              {editingId ? 'Guardar Cambios' : 'Crear Plan'}
+              {editingId ? "Guardar Cambios" : "Crear Plan"}
             </button>
           </div>
         </form>
       </Modal>
-
-
     </Layout>
   );
 };

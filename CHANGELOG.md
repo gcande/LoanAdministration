@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.0 - 2026-07-02
+
+### Features
+- feat: Añadir hooks para gestionar el nombre del negocio y la divisa del sistema, y actualizar componentes para utilizarlos
+
 ## v0.2.0 - 2026-03-08
 
 ### Other

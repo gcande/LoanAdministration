@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { fetchConfigByClave } from '../services';
 import { getStoredCurrency, setStoredCurrency } from '../utils/finance';
 
 const CONFIG_KEY = 'divisa';
@@ -12,15 +12,8 @@ export const useSystemCurrency = () => {
 
     const fetchCurrency = async () => {
       try {
-        const { data, error } = await supabase
-          .from('configuracion')
-          .select('valor')
-          .eq('clave', CONFIG_KEY)
-          .single();
-
-        if (error) return;
-
-        const value = data?.valor?.trim().toUpperCase();
+        const rawValue = await fetchConfigByClave(CONFIG_KEY);
+        const value = rawValue?.trim().toUpperCase();
         if (!value) return;
 
         setStoredCurrency(value);

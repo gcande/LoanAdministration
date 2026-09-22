@@ -100,9 +100,121 @@ npm run build
 
 - `/src/components`: Componentes reutilizables (Layout, etc.).
 - `/src/lib/supabase.ts`: Cliente de conexión a Supabase.
+- `/src/services`: **Service layer** — lógica de acceso a datos (ver abajo).
 - `/src/pages`: Vistas principales de la aplicación.
 - `/src/utils`: Utilidades financieras y formateadores.
 - `supabase_schema.sql`: Script de inicialización de base de datos.
+
+---
+
+## 🧩 Service Layer (`src/services/`)
+
+> Toda la lógica de acceso a Supabase está centralizada aquí. **Las páginas no deben importar `supabase` directamente** — siempre deben pasar por los servicios.
+
+### 📐 Convenciones
+
+1. **Singleton**: el cliente `supabase` vive en `src/lib/supabase.ts`. Los servicios lo consumen.
+2. **Tipos compartidos**: `services/types.ts` define `Cliente`, `Prestamo`, `Cuota`, `Pago`, `Configuracion`, `Perfil`, `PaginationParams`, `PaginatedResult<T>`, `ServiceResult<T>`.
+3. **Importar desde el barrel**:
+   ```ts
+   import { fetchClientes, fetchPrestamos, createCliente } from '../services';
+   ```
+4. **Errores uniformes**: las funciones devuelven `{ data, error }` (patrón Supabase) o datos normalizados (`{ data, count }` en listados).
+5. **Snake_case en español** para columnas y tablas (`clientes`, `planes_prestamo`, `cobrador_id`).
+
+### 📦 Módulos disponibles
+
+#### `clientes.ts`
+| Función | Descripción |
+|---|---|
+| `fetchClientes({ page, pageSize }, searchTerm?)` | List paginado, busca por nombre o identificación |
+| `fetchClientesForSelect()` | List mínimo (`id, nombre, identificacion`) para dropdowns |
+| `fetchClienteDetalle(id)` | Cliente + préstamos + cuotas en una sola llamada |
+| `createCliente(payload)` | Inserta un cliente |
+| `updateCliente(id, payload)` | Actualiza por id |
+| `softDeleteCliente(id)` | Soft delete (`deleted_at = NOW()`) |
+
+#### `planes.ts`
+| Función | Descripción |
+|---|---|
+| `fetchPlanes()` | Lista completa |
+| `fetchPlanesActivos()` | Solo `activo = true` (para selects y NewLoan) |
+| `createPlan(payload)` | Crea plan |
+| `updatePlan(id, payload)` | Actualiza |
+| `deletePlan(id)` | Elimina |
+
+#### `prestamos.ts`
+| Función | Descripción |
+|---|---|
+| `fetchDashboardStats(cobradorId?)` | Stats globales con filtro opcional por cobrador |
+| `fetchLoanAlerts(limit?)` | Préstamos con cuotas próximas a vencer o en mora |
+| `fetchPrestamosEnMoraIds()` | IDs de préstamos con mora activa (lee `dias_gracia` de config) |
+| `fetchPrestamosCounts(cobradorId?)` | Conteos para tabs (todos, activo, en_mora, pagado) |
+| `fetchPrestamos({ page, pageSize }, { searchTerm, filter, cobradorId, moraIds })` | List paginado con joins y filtros |
+| `fetchPrestamoConCliente(id)` | Préstamo + cliente (para detail / payments) |
+| `fetchPrestamosConCliente()` | Listado plano (PDF reports) |
+| `fetchAssignedLoansForCollector(cobradorId)` | Préstamos asignados a un cobrador, con cuotas |
+| `fetchWeeklyGoal(cobradorId, start, end)` | Suma de cuotas que vencen en el rango |
+| `createPrestamoConCuotas({ prestamo, cuotas })` | Crea préstamo + inserta todas sus cuotas |
+| `actualizarSaldoPrestamo(id, nuevoSaldo)` | Update saldo y estado (pagado si ≤ 0) |
+| `fetchPrestamosParaAsignar()` | Préstamos pendientes/activos listos para asignar a cobrador |
+| `asignarPrestamoCobrador(loanId, cobradorId)` | Asigna o remueve cobrador de un préstamo |
+| `fetchCollectorStats(cobradorId)` | Métricas de cobrador (cartera, recaudos, cuotas del día, mora) |
+
+#### `cuotas.ts`
+| Función | Descripción |
+|---|---|
+| `fetchCuotasByPrestamo(prestamoId)` | Cuotas de un préstamo, ordenadas |
+| `fetchCuotasByPrestamos(prestamoIds)` | Cuotas de varios préstamos (para detalle de cliente) |
+| `marcarCuotaPagada(cuotaId, moraAcumulada)` | Marca como pagada |
+
+#### `configuracion.ts`
+| Función | Descripción |
+|---|---|
+| `fetchConfiguracion()` | Devuelve `{ clave: valor }` |
+| `fetchConfiguracionList()` | Lista cruda (para la página Config) |
+| `fetchConfigByClave(clave)` | Lee un setting por clave |
+| `ensureCurrencySetting(current)` | Asegura que exista `divisa` y sincroniza localStorage |
+| `updateConfiguracion(id, valor)` | Update de un setting |
+
+#### `pagos.ts`
+| Función | Descripción |
+|---|---|
+| `registrarPago({ prestamoId, cuotaId, montoRecibido, aplicadoMora, aplicadoInteres, aplicadoCapital, metodoPago? })` | Registra un pago aplicando el monto a mora → interés → capital |
+| `fetchWeeklyCollected(cobradorId, start, end)` | Suma de pagos en un rango (semana actual) |
+
+#### `perfiles.ts`
+| Función | Descripción |
+|---|---|
+| `fetchPerfiles({ page, pageSize }, searchTerm?)` | List paginado |
+| `createAdminClient()` | Crea un cliente Supabase temporal (sin persistir sesión) |
+| `createUsuario({ email, password, rol })` | signUp + insert en `perfiles` |
+| `upsertPerfil({ id, email, rol })` | Inserta o actualiza perfil de usuario |
+| `fetchPerfilRol(userId)` | Lee el rol del usuario autenticado |
+| `updatePerfilRol(userId, newRole)` | Actualiza el rol de un usuario existente |
+| `softDeletePerfil(id)` | Soft delete |
+| `cambiarPasswordUsuario({ userId, newPassword })` | Llama a la Edge Function `change-password` |
+
+#### `auth.ts`
+| Función | Descripción |
+|---|---|
+| `loginWithPassword({ email, password })` | Autenticación con correo y contraseña |
+| `logout()` | Cierra la sesión activa en Supabase |
+| `getCurrentSession()` | Consulta la sesión actual persistida |
+| `subscribeToAuthChanges(callback)` | Suscripción reactiva a eventos de auth (login, logout, refresh) |
+
+
+### 🧪 Cómo añadir un nuevo servicio
+
+1. Crear archivo `src/services/<tabla>.ts`.
+2. Tipar entrada y salida usando los tipos de `services/types.ts`.
+3. Exportar desde `services/index.ts`.
+4. Usar desde la página:
+   ```ts
+   import { nuevaFuncion } from '../services';
+   const { data, error } = await nuevaFuncion(args);
+   ```
+5. **Nunca** importar `supabase` desde una página.
 
 ---
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { loginWithPassword } from '../services';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Mail, ChevronRight, AlertCircle } from 'lucide-react';
 import { useBusinessName } from '../hooks/useBusinessName';
@@ -19,7 +19,7 @@ const Login = () => {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await loginWithPassword({
       email,
       password,
     });

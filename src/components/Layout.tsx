@@ -182,6 +182,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
             <LogOut size={16} />
             <span>Cerrar Sesión</span>
           </button>
+          <div className="sidebar-version">v{__APP_VERSION__}</div>
         </div>
       </aside>
 
@@ -642,6 +643,16 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           background: #fee2e2;
         }
 
+        .sidebar-version {
+          font-size: 11px;
+          color: var(--text-muted);
+          text-align: center;
+          margin-top: 10px;
+          font-weight: 500;
+          letter-spacing: 0.02em;
+          opacity: 0.8;
+        }
+
         /* ========================
            MAIN CONTENT
         ======================== */
@@ -891,7 +902,8 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
           .app-sidebar.collapsed .sidebar-link span,
           .app-sidebar.collapsed .sidebar-link-arrow,
           .app-sidebar.collapsed .sidebar-user-profile .user-details,
-          .app-sidebar.collapsed .sidebar-footer .sidebar-logout-btn span {
+          .app-sidebar.collapsed .sidebar-footer .sidebar-logout-btn span,
+          .app-sidebar.collapsed .sidebar-footer .sidebar-version {
             display: none;
           }
 

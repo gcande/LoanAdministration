@@ -355,6 +355,7 @@ const Dashboard = () => {
           {profile?.rol === "admin" ? <Shield size={12} /> : <User size={12} />}
           {profile?.rol === "admin" ? "Administrador" : "Cobrador"}
         </span>
+        <span className="dashboard-version-badge">v{__APP_VERSION__}</span>
       </div>
       {/* STAT CARDS */}
       <div className="stats-row">
@@ -595,10 +596,25 @@ const Dashboard = () => {
 
       <style>{`
         .dashboard-role-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
           margin-bottom: 12px;
         }
         .dashboard-role-row .role-badge.dashboard {
           position: static;
+        }
+        .dashboard-version-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 3px 8px;
+          border-radius: 9999px;
+          font-size: 11px;
+          font-weight: 600;
+          background: #f1f5f9;
+          color: #64748b;
+          border: 1px solid #e2e8f0;
+          letter-spacing: 0.02em;
         }
         .alert-action-link {
           margin-left: auto;
